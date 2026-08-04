@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ivr"
+version = "0.1.0"
+description = "Inferia Vision Runtime - RL-assisted adaptive vision inference"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.20",
+    "opencv-python>=4.5",
+    "ultralytics>=8.3",
+    "gymnasium>=0.29",
+    "stable-baselines3>=2.3",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.5", "black>=24"]
+
+[tool.setuptools.packages.find]
+where = ["implementation"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
