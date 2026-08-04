@@ -1,0 +1,14 @@
+weights_dir: weights
+models:
+  - name: yolo11n
+    file: yolo11n.pt
+    gflops: 6.6
+  - name: yolo11s
+    file: yolo11s.pt
+    gflops: 21.7
+  - name: yolo11m
+    file: yolo11m.pt
+    gflops: 68.5
+
+resolutions: [640]
+precisions: [fp32]
