@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Weights (re-downloadable)
+weights/*.pt
+
+# Runtime artifacts
+runs/
+output/
+training/
+*.log
+
+# Local project context (regenerated at milestones)
+docs/knowledge_graph.json
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
