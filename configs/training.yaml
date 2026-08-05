@@ -1,0 +1,15 @@
+algorithm: dqn
+timesteps: 20000
+policy: MlpPolicy
+learning_rate: 0.0001
+buffer_size: 100000
+batch_size: 64
+gamma: 0.99
+train_freq: 4
+gradient_steps: 1
+target_update_interval: 1000
+exploration_fraction: 0.2
+exploration_final_eps: 0.05
+save_dir: training
+tb_dir: runs/tensorboard
+log_name: dqn
