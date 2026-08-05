@@ -1,0 +1,9 @@
+quality_backend: proxy
+w_quality: 1.0
+w_latency: 1.0
+w_compute: 0.5
+w_switch: 0.3
+target_count: 10.0
+max_latency_ms: 40.0
+min_fps: 15.0
+labels_path: null
