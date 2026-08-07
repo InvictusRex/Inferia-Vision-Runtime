@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..model_management.runtime_config_space import RuntimeConfig
 from ..reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
 
 
@@ -28,6 +29,20 @@ class AlwaysModel(Policy):
         return self.action
 
 
+class AlwaysConfig(Policy):
+    """Always run a specific runtime config (model x resolution x precision)."""
+
+    def __init__(self, env: VisionRuntimeEnv, model: str, resolution: int, precision: str):
+        super().__init__(env.action_space.n)
+        self.action = env.config_space.config_to_action(
+            RuntimeConfig(model=model, resolution=resolution, precision=precision)
+        )
+        self.name = f"always_{model}_{resolution}_{precision}"
+
+    def choose(self, obs: np.ndarray, info: dict) -> int:
+        return self.action
+
+
 class RandomPolicy(Policy):
     def __init__(self, n_actions: int, seed: int = 0):
         super().__init__(n_actions)
@@ -39,18 +54,29 @@ class RandomPolicy(Policy):
 
 
 class RuleBasedPolicy(Policy):
-    def __init__(self, n_actions: int):
-        super().__init__(n_actions)
+    """Object-count thresholds mapped to canonical configs (model x 640 x fp32)."""
+
+    def __init__(
+        self,
+        env: VisionRuntimeEnv,
+        thresholds=((8, "yolo11n"), (16, "yolo11s"), (1e9, "yolo11m")),
+    ):
+        super().__init__(env.action_space.n)
         self.name = "rule_based"
+        self._actions = [
+            env.config_space.config_to_action(
+                RuntimeConfig(model=m, resolution=640, precision="fp32")
+            )
+            for _, m in thresholds
+        ]
+        self._thr = [float(t) for t, _ in thresholds]
 
     def choose(self, obs: np.ndarray, info: dict) -> int:
         count = float(info.get("obj_count", 0.0))
-        ratio = count / max(1, self.n_actions * 5)
-        if ratio < 1.0:
-            return 0
-        if ratio < 2.0:
-            return min(1, self.n_actions - 1)
-        return min(2, self.n_actions - 1)
+        for i, thr in enumerate(self._thr):
+            if count < thr:
+                return self._actions[i]
+        return self._actions[-1]
 
 
 class ContextualBandit(Policy):
@@ -81,7 +107,7 @@ class ContextualBandit(Policy):
 
 
 class SB3Policy(Policy):
-    def __init__(self, model, name: str = "ivr_dqn"):
+    def __init__(self, model, name: str = "ivr_rl"):
         self.model = model
         self.name = name
 
@@ -95,9 +121,24 @@ def build_policy(name: str, env: VisionRuntimeEnv, **kwargs) -> Policy:
     if name == "random":
         return RandomPolicy(n, seed=int(kwargs.get("seed", 0)))
     if name == "rule_based":
-        return RuleBasedPolicy(n)
+        return RuleBasedPolicy(env)
     if name == "contextual_bandit":
         return ContextualBandit(n)
     if name.startswith("always_"):
-        return AlwaysModel(n, int(name.split("_", 1)[1]))
+        parts = name.split("_")[1:]
+        if len(parts) == 3:
+            return AlwaysConfig(env, parts[0], int(parts[1]), parts[2])
+        return AlwaysModel(n, int(parts[0]))
     raise ValueError(f"unknown policy: {name}")
+
+
+def default_baselines(env: VisionRuntimeEnv) -> list[Policy]:
+    """Canonical fixed pipelines + heuristic schedulers for comparison."""
+    return [
+        AlwaysConfig(env, "yolo11n", 640, "fp32"),
+        AlwaysConfig(env, "yolo11s", 640, "fp32"),
+        AlwaysConfig(env, "yolo11m", 640, "fp32"),
+        RandomPolicy(env.action_space.n, seed=0),
+        RuleBasedPolicy(env),
+        ContextualBandit(env.action_space.n),
+    ]
