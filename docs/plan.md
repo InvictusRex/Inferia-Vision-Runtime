@@ -181,9 +181,18 @@ Balances competing objectives:
 
 Two quality backends, selected by config:
 
-- **Proxy** (default): no ground truth required. Quality ≈ mean confidence,
-  object-count stability, box-size consistency.
+- **Proxy** (default): no ground truth required. Quality = mean confidence ×
+  `count / target_count` (uncapped, so detecting more objects is rewarded) blended
+  with object-count stability, box-size consistency.
 - **mAP**: requires annotated data. Ground-truth mAP vs. model output.
+
+Latency / FPS used in the reward and observation come from a configurable source:
+
+- `latency_source: edge_profile` (default) → `LatencyEstimator` supplies nominal
+  per-model latency for the target edge hardware (Radxa Rock 5C). Placeholders:
+  yolo11n 18ms, yolo11s 45ms, yolo11m 120ms @640 until Phase 3 real benchmark.
+- `latency_source: live` → measured inference latency from `Telemetry` (the
+  pre-edge behavior, GPU/thermal-dependent).
 
 ### 6.8 Priority / Constraint Configuration
 
@@ -305,16 +314,23 @@ comparison, `--model` to add a trained DQN) and
 ## 11. Development Roadmap
 
 ### Phase 1 — Proof of Concept
-- [ ] Project scaffolding: pyproject, ruff config, `implementation/` skeleton, configs
-- [ ] Variants + action space (model only: `{n,s,m}`)
-- [ ] Detector wrapper with latency/FPS telemetry
-- [ ] Scene Analyzer → observation vector
-- [ ] Pluggable reward (proxy default, mAP option) with switching penalty
-- [ ] Gymnasium env over a video file
-- [ ] SB3 **DQN** agent harness
-- [ ] Eval harness: baselines + metrics comparison
-- **Exit criteria:** DQN beats fixed pipelines on the accuracy-latency trade-off
-  on the owner-provided test video.
+- [x] Project scaffolding: pyproject, ruff config, `implementation/` skeleton, configs
+- [x] Variants + action space (model only: `{n,s,m}`)
+- [x] Detector wrapper with latency/FPS telemetry
+- [x] Scene Analyzer → observation vector
+- [x] Pluggable reward (proxy default, mAP option) with switching penalty
+- [x] Gymnasium env over a video file
+- [x] SB3 **DQN** agent harness
+- [x] Eval harness: baselines + metrics comparison
+- [x] Edge-compute-aware reward: `LatencyEstimator` with nominal Radxa Rock 5C
+  profile (n 18 / s 45 / m 120 ms @640 placeholders) + `latency_source`
+  toggle (`edge_profile | live`), so the RL learns real switching
+- **Exit criteria (MET 2026-08-06):** DQN beats fixed pipelines on the
+  accuracy-latency trade-off on the owner-provided test video. On the edge
+  profile, `ivr_dqn` (+1411) > always-nano (+1303) > rule-based (+1355) with
+  scene-correlated switching (nano on sparse, yolo11s on mid/dense). Caveat:
+  always-yolo11s (+1472) still edges the DQN on this mostly-mid-density video;
+  the DQN trades that margin for real adaptation (278 switches).
 
 ### Phase 2 — Adaptive Runtime
 - [ ] Expand action space to model × resolution × precision
@@ -409,3 +425,6 @@ models integrate without changing the core runtime architecture.
 - True INT8 requires TensorRT in Phase 3; FP16 is available in Phase 2.
 - Reward with mAP needs annotated data; otherwise the proxy path is used.
 - SB3/torch/py3.9 compatibility must be validated at install time.
+- Edge-profile latency values are **placeholders** (n 18 / s 45 / m 120 ms) for
+  training until Phase 3 benchmarks the real Radxa Rock 5C; `LatencyEstimator`
+  will then be calibrated from measured numbers.

@@ -7,6 +7,7 @@ import numpy as np
 from gymnasium import spaces
 
 from ..model_management.runtime_config_space import ConfigSpace
+from ..runtime.latency_estimator import LatencyEstimator
 from ..runtime.system_telemetry import Telemetry
 from ..vision_pipeline.video_frame_source import FrameSource
 from ..vision_pipeline.yolo_detector import Detector, Detections
@@ -28,6 +29,7 @@ class VisionRuntimeEnv(gym.Env):
         reward: RewardCalculator,
         telemetry: Optional[Telemetry] = None,
         frame_step: int = 1,
+        latency_estimator: Optional[LatencyEstimator] = None,
     ):
         super().__init__()
         self.frame_source = frame_source
@@ -38,6 +40,7 @@ class VisionRuntimeEnv(gym.Env):
         self.reward = reward
         self.telemetry = telemetry or Telemetry()
         self.frame_step = max(1, int(frame_step))
+        self.latency_estimator = latency_estimator
 
         self.action_space = spaces.Discrete(self.config_space.n_actions)
         self.observation_space = spaces.Box(
@@ -113,7 +116,12 @@ class VisionRuntimeEnv(gym.Env):
 
     def _infer(self, frame: np.ndarray, action: int) -> Detections:
         config = self.config_space.action_to_config(action)
-        return self.detector.detect(frame, config)
+        detections = self.detector.detect(frame, config)
+        if self.latency_estimator is not None and self.telemetry.latencies_ms:
+            latency = self.latency_estimator.latency_ms(config.model)
+            if latency > 0:
+                self.telemetry.latencies_ms[-1] = latency
+        return detections
 
     def _make_info(self, detections: Detections, obs, reward: float) -> dict:
         scene = self._scene

@@ -3,12 +3,15 @@ models:
   - name: yolo11n
     file: yolo11n.pt
     gflops: 6.6
+    edge_latency_ms: 18
   - name: yolo11s
     file: yolo11s.pt
     gflops: 21.7
+    edge_latency_ms: 45
   - name: yolo11m
     file: yolo11m.pt
     gflops: 68.5
+    edge_latency_ms: 120
 
 resolutions: [640]
 precisions: [fp32]

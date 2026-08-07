@@ -19,6 +19,8 @@ class RewardConfig:
     min_fps: float = 15.0
     labels_path: str | None = None
     compute_cost: tuple[float, ...] = ()
+    latency_source: str = "live"
+    latency_jitter_ms: float = 0.0
 
 
 class RewardCalculator:
@@ -48,7 +50,7 @@ class ProxyReward(RewardCalculator):
         cfg = self.cfg
         count = len(detections)
         mean_conf = float(detections.confs.mean()) if count else 0.0
-        quality = mean_conf * min(1.0, count / max(cfg.target_count, 1e-6))
+        quality = mean_conf * (count / max(cfg.target_count, 1e-6))
         stability = float(scene.temporal_consistency)
         quality_term = cfg.w_quality * (0.7 * quality + 0.3 * stability)
 

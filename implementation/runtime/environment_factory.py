@@ -7,6 +7,7 @@ import yaml
 
 from ..model_management.runtime_config_space import ConfigSpace
 from ..model_management.model_variants import build_variants
+from ..runtime.latency_estimator import LatencyEstimator
 from ..runtime.system_telemetry import Telemetry
 from ..vision_pipeline.video_frame_source import VideoFrameSource
 from ..vision_pipeline.yolo_detector import Detector
@@ -50,6 +51,11 @@ def build_env_from_configs(env_cfg: dict, variants_cfg: dict, reward_cfg: dict) 
         for i in range(config_space.n_actions)
     )
     reward = build_reward(reward_cfg)
+    estimator = None
+    if reward_cfg.latency_source != "live":
+        estimator = LatencyEstimator.from_variants(
+            variants, gflops_by_model, jitter_ms=reward_cfg.latency_jitter_ms
+        )
     source = VideoFrameSource(str(env_cfg["video_path"]))
     frame_step = int(env_cfg.get("frame_step", 1))
     return VisionRuntimeEnv(
@@ -61,4 +67,5 @@ def build_env_from_configs(env_cfg: dict, variants_cfg: dict, reward_cfg: dict) 
         reward=reward,
         telemetry=telemetry,
         frame_step=frame_step,
+        latency_estimator=estimator,
     )
