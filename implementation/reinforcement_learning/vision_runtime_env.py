@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import islice
 from typing import Iterator, Optional
 
 import gymnasium as gym
@@ -9,7 +10,7 @@ from gymnasium import spaces
 from ..model_management.runtime_config_space import ConfigSpace
 from ..runtime.latency_estimator import LatencyEstimator
 from ..runtime.system_telemetry import Telemetry
-from ..vision_pipeline.video_frame_source import FrameSource
+from ..vision_pipeline.video_frame_source import DatasetVideoSource, FrameSource
 from ..vision_pipeline.yolo_detector import Detector, Detections
 from ..vision_pipeline.scene_analyzer import SceneAnalyzer, SceneFeatures
 from .observation_features import FeatureBuilder
@@ -30,6 +31,8 @@ class VisionRuntimeEnv(gym.Env):
         telemetry: Optional[Telemetry] = None,
         frame_step: int = 1,
         latency_estimator: Optional[LatencyEstimator] = None,
+        max_episode_frames: Optional[int] = None,
+        episode_min_frames: int = 150,
     ):
         super().__init__()
         self.frame_source = frame_source
@@ -41,6 +44,8 @@ class VisionRuntimeEnv(gym.Env):
         self.telemetry = telemetry or Telemetry()
         self.frame_step = max(1, int(frame_step))
         self.latency_estimator = latency_estimator
+        self.max_episode_frames = max_episode_frames
+        self.episode_min_frames = max(1, int(episode_min_frames))
 
         self.action_space = spaces.Discrete(self.config_space.n_actions)
         self.observation_space = spaces.Box(
@@ -55,7 +60,16 @@ class VisionRuntimeEnv(gym.Env):
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
-        self._frames = self.frame_source.iter_frames(step=self.frame_step)
+        if isinstance(self.frame_source, DatasetVideoSource):
+            self.frame_source.random_episode(
+                min_frames=self.episode_min_frames,
+                max_frames=self.max_episode_frames or self.frame_source.frame_count,
+                step=self.frame_step,
+            )
+        frames = self.frame_source.iter_frames(step=self.frame_step)
+        if self.max_episode_frames is not None:
+            frames = islice(frames, int(self.max_episode_frames))
+        self._frames = frames
         self._frame_idx = 0
         self._current_action = 0
         self._prev_action = None
@@ -118,7 +132,9 @@ class VisionRuntimeEnv(gym.Env):
         config = self.config_space.action_to_config(action)
         detections = self.detector.detect(frame, config)
         if self.latency_estimator is not None and self.telemetry.latencies_ms:
-            latency = self.latency_estimator.latency_ms(config.model)
+            latency = self.latency_estimator.latency_ms(
+                config.model, config.resolution, config.precision
+            )
             if latency > 0:
                 self.telemetry.latencies_ms[-1] = latency
         return detections
@@ -134,6 +150,11 @@ class VisionRuntimeEnv(gym.Env):
             "fps": self.telemetry.fps(),
             "action": self._current_action,
             "model": self.config_space.action_to_config(self._current_action).model,
+            "video": (
+                self.frame_source.current_path.name
+                if isinstance(self.frame_source, DatasetVideoSource)
+                else "single"
+            ),
             "reward": float(reward),
             "obs": obs,
         }

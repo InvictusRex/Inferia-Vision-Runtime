@@ -1,0 +1,8 @@
+dataset_dir: ../BDDA/BDDA
+dataset_split: training
+frame_step: 1
+episode_min_frames: 150
+max_episode_frames: 300
+conf_threshold: 0.25
+device: cuda
+seed: 0
