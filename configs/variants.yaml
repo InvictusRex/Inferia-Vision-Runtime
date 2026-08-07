@@ -13,5 +13,5 @@ models:
     gflops: 68.5
     edge_latency_ms: 120
 
-resolutions: [640]
-precisions: [fp32]
+resolutions: [480, 640, 960]
+precisions: [fp32, fp16]

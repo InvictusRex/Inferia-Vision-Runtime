@@ -4,6 +4,9 @@ import numpy as np
 
 
 class LatencyEstimator:
+    REF_RESOLUTION = 640
+    PRECISION_FACTOR = {"fp32": 1.0, "fp16": 0.6}
+
     def __init__(
         self,
         model_latencies: dict[str, float],
@@ -49,14 +52,25 @@ class LatencyEstimator:
             return self._gflop_proportional({model: self.model_gflops[model]}).get(model, 0.0)
         return 0.0
 
-    def latency_ms(self, model: str) -> float:
+    @staticmethod
+    def _resolution_scale(resolution: int) -> float:
+        res = max(1, int(resolution or LatencyEstimator.REF_RESOLUTION))
+        return (res / LatencyEstimator.REF_RESOLUTION) ** 2
+
+    def latency_ms(
+        self, model: str, resolution: int = REF_RESOLUTION, precision: str = "fp32"
+    ) -> float:
         latency = self._latency_of(model)
         if latency <= 0:
             return 0.0
+        latency *= self._resolution_scale(resolution)
+        latency *= float(self.PRECISION_FACTOR.get(str(precision), 1.0))
         if self.jitter_ms > 0:
             latency += float(np.random.uniform(-self.jitter_ms, self.jitter_ms))
         return max(1e-3, latency)
 
-    def fps(self, model: str) -> float:
-        latency = self.latency_ms(model)
+    def fps(
+        self, model: str, resolution: int = REF_RESOLUTION, precision: str = "fp32"
+    ) -> float:
+        latency = self.latency_ms(model, resolution, precision)
         return 1000.0 / latency if latency > 0 else 0.0

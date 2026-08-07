@@ -12,8 +12,8 @@ class FeatureBuilder:
     MAX_FPS = 60.0
     MAX_LATENCY = 100.0
 
-    def __init__(self, n_models: int = 3):
-        self.n_models = max(1, int(n_models))
+    def __init__(self, n_actions: int = 3):
+        self.n_actions = max(2, int(n_actions))
 
     @property
     def dim(self) -> int:
@@ -30,5 +30,5 @@ class FeatureBuilder:
         v[6] = float(np.clip(scene.temporal_consistency, 0.0, 1.0))
         v[7] = float(np.clip(telemetry.fps() / self.MAX_FPS, 0.0, 1.0))
         v[8] = float(np.clip(telemetry.last_latency_ms() / self.MAX_LATENCY, 0.0, 1.0))
-        v[9] = float(np.clip(action / (self.n_models - 1), 0.0, 1.0))
+        v[9] = float(np.clip(action / (self.n_actions - 1), 0.0, 1.0))
         return v
