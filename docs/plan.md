@@ -1,7 +1,7 @@
 # Inferia Vision Runtime (IVR) — Project Plan & Source of Truth
 
 > **Status:** Active / Under development
-> **Last updated:** 2026-08-04
+> **Last updated:** 2026-08-07
 > **This document is the single source of truth** for the IVR project across all phases.
 > Changes to scope, architecture, reward design, or roadmap MUST be reflected here first.
 
@@ -9,9 +9,12 @@
 
 ## 1. Vision
 
-Inferia Vision Runtime (IVR) is an adaptive vision inference framework that uses
-Reinforcement Learning (RL) to dynamically optimize computer vision pipelines in
-real time.
+Inferia Vision Runtime (IVR) is a runtime orchestration framework for
+adaptive AI perception. Rather than treating inference as a fixed pipeline,
+IVR models vision execution as a sequential decision-making problem,
+enabling reinforcement learning agents to dynamically orchestrate models,
+runtime configurations, and hardware resources according to scene
+complexity and deployment constraints.
 
 Unlike traditional systems that use a fixed inference configuration throughout
 deployment, IVR continuously adapts its execution strategy according to scene
@@ -333,9 +336,20 @@ comparison, `--model` to add a trained DQN) and
   the DQN trades that margin for real adaptation (278 switches).
 
 ### Phase 2 — Adaptive Runtime
-- [ ] Expand action space to model × resolution × precision
+- [x] Expand action space to model × resolution × precision
+  (`{n,s,m} × {480,640,960} × {fp32,fp16}` = **18 actions**, Phase 2a)
+- [x] Multi-video dataset training: BDD-A dashcam videos
+  (`../BDDA/BDDA`, 926 train / 203 val / 306 test, 720p 30fps clips),
+  chunked episodes (150–300 frames, random video + random offset, seeded)
+- [x] DQN retrained on BDD-A with the 18-action space + edge-profile reward
+  (completed 2026-08-08, 120k steps DQN, checkpoint `training/dqn_bdd_final.zip`;
+  eval on all 306 test videos: claim vs `always-yolo11s@640-fp32` MET
+  (+11.8, paired t-test p<0.001, 65% wins). Caveat: `always-yolo11n` (+178.6)
+  still leads overall — BDD-A is mostly mid/sparse density where nano's cheap
+  latency wins the tuned reward. DQN dominates dense scenes (291.6 vs nano
+  257.1 / small 250.2). Details in `docs/knowledge_graph.json` → `phase_2a_bdd_training`.)
+- [ ] PPO alongside DQN (`train_runtime.py --algorithm ppo`)
 - [ ] NVML telemetry (VRAM, util, GPU temp, power) into observations
-- [ ] **PPO** alongside DQN
 - [ ] Constraint-aware rewards (hard constraints + priority weights)
 - [ ] Switching-penalty tuning
 
@@ -425,6 +439,22 @@ models integrate without changing the core runtime architecture.
 - True INT8 requires TensorRT in Phase 3; FP16 is available in Phase 2.
 - Reward with mAP needs annotated data; otherwise the proxy path is used.
 - SB3/torch/py3.9 compatibility must be validated at install time.
-- Edge-profile latency values are **placeholders** (n 18 / s 45 / m 120 ms) for
-  training until Phase 3 benchmarks the real Radxa Rock 5C; `LatencyEstimator`
-  will then be calibrated from measured numbers.
+- Edge-profile latency values are **placeholders** (n 18 / s 45 / m 120 ms @640)
+  for training until Phase 3 benchmarks the real Radxa Rock 5C; `LatencyEstimator`
+  will then be calibrated from measured numbers. Phase 2a adds placeholder scaling:
+  latency ∝ `(resolution/640)²` and a `fp16` factor of `0.6`.
+- **BDD-A training data** lives **outside the repo** as a sibling directory:
+  `../BDDA/BDDA/{training,validation,test}/camera_videos/` (relative to the repo
+  root). Only `camera_videos/` are used (gazemap/gps removed). Referenced via
+  `configs/env_bdd.yaml` `dataset_dir: ../BDDA/BDDA`.
+- **Root launchers:** `python train.py` (train) and `python eval.py` (evaluate a
+  saved model). Both work from any directory (add repo root to `sys.path`) and
+  expose the dataset dir/split straight from the CLI.
+- **Eval output naming scheme:** `output/{dataset}_{model_stem}_eval_output.csv`
+  (e.g. `test_dqn_bdd_final_eval_output.csv`). Encodes split + model so future
+  evals never overwrite each other; override with `--output <name>`.
+- Density survey (yolo11n @640, 40 train videos, 2536 frames): median count ~9,
+  mean 9.3, p90=14, p99=18, 0.8% empty frames → reward keeps `target_count: 10`
+  (same profile as Phase 1) and obs `MAX_COUNT: 40`.
+- The old Phase 1 checkpoint `training/dqn_final.zip` was trained on `Discrete(3)`
+  and is **incompatible** with the new 18-action space; retrain with BDD-A.

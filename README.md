@@ -1,2 +1,2 @@
 # Inferia-Vision-Runtime
-Inferia Vision Runtime is an adaptive vision framework that uses reinforcement learning to dynamically optimize AI inference pipelines by selecting models, image resolutions, precision modes, and execution strategies to maximize accuracy while minimizing latency, power consumption, and computational cost on edge devices.
+Inferia Vision Runtime (IVR) is a runtime orchestration framework for adaptive AI perception. Rather than treating inference as a fixed pipeline, IVR models vision execution as a sequential decision-making problem, enabling reinforcement learning agents to dynamically orchestrate models, runtime configurations, and hardware resources according to scene complexity and deployment constraints.

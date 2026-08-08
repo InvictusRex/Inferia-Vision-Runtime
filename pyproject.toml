@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ivr"
 version = "0.1.0"
-description = "Inferia Vision Runtime - RL-assisted adaptive vision inference"
+description = "Runtime orchestration framework for adaptive AI perception; models vision execution as a sequential decision-making problem and uses RL to orchestrate models, configs, and hardware by scene complexity and deployment constraints."
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
