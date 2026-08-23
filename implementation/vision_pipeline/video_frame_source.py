@@ -70,12 +70,30 @@ class DatasetVideoSource(FrameSource):
     contiguous chunk within it (of `min_frames`..`max_frames` yielded frames)
     is chosen. Subsequent `iter_frames` yields exactly that chunk. Seeded for
     reproducible episode sequences.
+
+    Corrupt/unopenable videos (e.g. truncated mp4s missing a ``moov`` atom) are
+    filtered out at construction and skipped with a bounded retry at sampling,
+    so a single bad file cannot crash training.
     """
+
+    MAX_SAMPLE_ATTEMPTS = 20
 
     def __init__(self, paths: list[str], seed: int = 0):
         if not paths:
             raise ValueError("DatasetVideoSource requires at least one video path")
-        self.paths = [Path(p) for p in paths]
+        raw = [Path(p) for p in paths]
+        filtered = self._filter_openable(raw)
+        dropped = len(raw) - len(filtered)
+        if not filtered:
+            raise FileNotFoundError(
+                f"DatasetVideoSource: all {len(raw)} videos unopenable/corrupt"
+            )
+        if dropped:
+            print(
+                f"DatasetVideoSource: dropped {dropped}/{len(raw)} "
+                f"unopenable/corrupt videos"
+            )
+        self.paths = filtered
         self._rng = np.random.default_rng(int(seed))
         self._current_index = 0
         self._start_frame = 0
@@ -85,6 +103,19 @@ class DatasetVideoSource(FrameSource):
         self._width = 0
         self._height = 0
         self._set_current(0)
+
+    @staticmethod
+    def _filter_openable(paths: list[Path]) -> list[Path]:
+        good: list[Path] = []
+        for p in paths:
+            cap = cv2.VideoCapture(str(p))
+            ok = bool(cap.isOpened())
+            has_frame = bool(cap.grab()) if ok else False
+            n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if ok else 0
+            cap.release()
+            if ok and (has_frame or n > 0):
+                good.append(p)
+        return good
 
     def _set_current(self, index: int):
         self._current_index = int(index) % len(self.paths)
@@ -126,9 +157,23 @@ class DatasetVideoSource(FrameSource):
         """
         step = max(1, int(step))
         min_frames = max(1, int(min_frames))
-        index = int(self._rng.integers(0, len(self.paths)))
-        self._set_current(index)
-        n = self._frame_count
+        last_error: Exception | None = None
+        for _ in range(self.MAX_SAMPLE_ATTEMPTS):
+            index = int(self._rng.integers(0, len(self.paths)))
+            try:
+                self._set_current(index)
+            except FileNotFoundError as exc:
+                last_error = exc
+                continue
+            n = self._frame_count
+            if n > 0:
+                break
+            last_error = None
+        else:
+            raise FileNotFoundError(
+                f"DatasetVideoSource: could not open a healthy video after "
+                f"{self.MAX_SAMPLE_ATTEMPTS} attempts"
+            ) from last_error
         if n <= 0:
             self._start_frame = 0
             self._max_frames = None
