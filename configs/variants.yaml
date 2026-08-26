@@ -1,17 +1,22 @@
+# edge_latency_ms / edge_weights_mb are SIMULATED IVR parameters (not measured on
+# real hardware); see configs/hardware.yaml for the physical/simulated/policy split.
 weights_dir: weights
 models:
   - name: yolo11n
     file: yolo11n.pt
     gflops: 6.6
     edge_latency_ms: 18
+    edge_weights_mb: 60
   - name: yolo11s
     file: yolo11s.pt
     gflops: 21.7
     edge_latency_ms: 45
+    edge_weights_mb: 120
   - name: yolo11m
     file: yolo11m.pt
     gflops: 68.5
     edge_latency_ms: 120
+    edge_weights_mb: 260
 
 resolutions: [480, 640, 960]
 precisions: [fp32, fp16]

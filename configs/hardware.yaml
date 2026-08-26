@@ -1,0 +1,33 @@
+# ROCK 5C edge profile for the IVR simulation.
+# Sections are deliberately separated: `physical` is vendor specification,
+# `simulated` is synthetic IVR parameters (NOT measurements, NOT board specs),
+# `policy` is IVR runtime budgets (NOT physical limits),
+# `measured` stays empty until Phase 3 benchmarking on real hardware.
+name: rock_5c_rk3588s2
+
+physical:            # vendor-published specification of the real 8 GB ROCK 5C
+  soc: RK3588S2
+  npu_tops_int8: 6.0
+  memory_type: LPDDR4X
+  memory_shared: true            # unified system memory; NO dedicated VRAM
+  system_memory_mb: 8192         # known board configuration, NOT an inference budget
+
+simulated:           # TEMPORARY SYNTHETIC SIMULATION PARAMETERS -- not measured
+  npu_efficiency: 0.5            # assumed achievable fraction of peak TOPS
+  activation_scale_mb: 60.0      # assumed activation working set at 640 px
+  power_idle_w: 3.0              # synthetic idle draw
+  power_envelope_w: 15.0         # synthetic full-load draw. NOT a ROCK 5C max power rating.
+  mem_bandwidth_power_share: 0.25
+  ambient_temp_c: 35.0
+  temp_rise_c: 40.0              # synthetic rise at sustained full load -> 35..75 C
+  temp_ewma_alpha: 0.2
+  thermal_throttle_temp_c: 80.0
+  thermal_throttle_latency_factor: 1.5   # latency inflation applied while throttled
+  thermal_throttle_enabled: false        # OFF for the main runs; ablation only
+
+policy:              # IVR RUNTIME BUDGETS -- project choices, not hardware limits
+  power_budget_w: 40.0                 # IVR simulation/policy power budget
+  inference_memory_budget_mb: 512      # IVR inference allocation, NOT the 8 GB system memory
+  target_fps: 30.0
+
+measured: {}         # Phase 3 fills this from real ROCK 5C benchmarks

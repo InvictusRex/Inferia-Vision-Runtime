@@ -11,6 +11,7 @@ class ModelVariant:
     precision: str = "fp32"
     gflops: float = 0.0
     edge_latency_ms: float = 0.0
+    edge_weights_mb: float = 0.0
 
 
 def build_variants(cfg: dict) -> dict[str, ModelVariant]:
@@ -24,5 +25,6 @@ def build_variants(cfg: dict) -> dict[str, ModelVariant]:
             precision=str(item.get("precision", "fp32")),
             gflops=float(item.get("gflops", 0.0)),
             edge_latency_ms=float(item.get("edge_latency_ms", 0.0)),
+            edge_weights_mb=float(item.get("edge_weights_mb", 0.0)),
         )
     return variants

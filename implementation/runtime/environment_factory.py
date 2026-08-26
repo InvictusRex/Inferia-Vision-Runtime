@@ -7,6 +7,7 @@ import yaml
 
 from ..model_management.runtime_config_space import ConfigSpace
 from ..model_management.model_variants import build_variants
+from ..runtime.edge_profile import EdgeProfile
 from ..runtime.latency_estimator import LatencyEstimator
 from ..runtime.system_telemetry import Telemetry
 from ..vision_pipeline.video_frame_source import DatasetVideoSource, VideoFrameSource
@@ -27,6 +28,7 @@ def build_env_from_configs(
     variants_cfg: dict,
     reward_cfg: dict,
     video_override: str | None = None,
+    hardware_cfg: dict | None = None,
 ) -> VisionRuntimeEnv:
     variants = build_variants(variants_cfg)
     weights_dir = variants_cfg.get("weights_dir", "weights")
@@ -46,7 +48,6 @@ def build_env_from_configs(
         telemetry=telemetry,
     )
     analyzer = SceneAnalyzer()
-    features = FeatureBuilder(n_actions=config_space.n_actions)
     reward_fields = {f.name for f in fields(RewardConfig)}
     reward_cfg = RewardConfig(**{k: v for k, v in reward_cfg.items() if k in reward_fields})
     gflops_by_model = {name: variant.gflops for name, variant in variants.items()}
@@ -65,6 +66,24 @@ def build_env_from_configs(
         estimator = LatencyEstimator.from_variants(
             variants, gflops_by_model, jitter_ms=reward_cfg.latency_jitter_ms
         )
+
+    edge_profile = None
+    if hardware_cfg:
+        edge_estimator = estimator or LatencyEstimator.from_variants(
+            variants, gflops_by_model, jitter_ms=reward_cfg.latency_jitter_ms
+        )
+        edge_profile = EdgeProfile.from_configs(hardware_cfg, variants, edge_estimator)
+
+    if edge_profile is not None:
+        sim = edge_profile.profile.simulated
+        features = FeatureBuilder(
+            n_actions=config_space.n_actions,
+            power_budget_w=edge_profile.profile.policy.power_budget_w,
+            ambient_temp_c=sim.ambient_temp_c,
+            throttle_temp_c=sim.thermal_throttle_temp_c,
+        )
+    else:
+        features = FeatureBuilder(n_actions=config_space.n_actions)
 
     if video_override is not None:
         source = VideoFrameSource(str(video_override))
@@ -96,4 +115,5 @@ def build_env_from_configs(
         latency_estimator=estimator,
         max_episode_frames=max_episode_frames,
         episode_min_frames=episode_min_frames,
+        edge_profile=edge_profile,
     )
