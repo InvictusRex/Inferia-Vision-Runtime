@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from ..runtime.edge_profile import compute_constraint_violations
 from ..runtime.system_telemetry import Telemetry
 from ..vision_pipeline.yolo_detector import Detections
 from ..vision_pipeline.scene_analyzer import SceneFeatures
@@ -21,6 +22,10 @@ class RewardConfig:
     compute_cost: tuple[float, ...] = ()
     latency_source: str = "live"
     latency_jitter_ms: float = 0.0
+    constraints: dict = field(default_factory=dict)
+    constraint_weights: dict = field(default_factory=dict)
+    constraint_default_weight: float = 2.0
+    constraint_cliff: float = 0.0
 
 
 class RewardCalculator:
@@ -66,9 +71,17 @@ class ProxyReward(RewardCalculator):
             switch_pen = -cfg.w_switch
 
         constraint_pen = 0.0
+        if cfg.constraints:
+            gpu = telemetry.gpu
+            if gpu is not None:
+                violations = compute_constraint_violations(gpu.as_dict(), cfg.constraints)
+                for key, frac in violations.items():
+                    w = float(cfg.constraint_weights.get(key, cfg.constraint_default_weight))
+                    constraint_pen -= w * frac + cfg.constraint_cliff
+
         fps = telemetry.fps()
         if cfg.min_fps > 0 and 0.0 < fps < cfg.min_fps:
-            constraint_pen = -0.5 * (1.0 - fps / cfg.min_fps)
+            constraint_pen -= 0.5 * (1.0 - fps / cfg.min_fps)
 
         return float(quality_term + latency_term + compute_term + switch_pen + constraint_pen)
 

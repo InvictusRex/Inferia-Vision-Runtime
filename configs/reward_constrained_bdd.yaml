@@ -1,0 +1,32 @@
+# EXPERIMENTAL / STRESS-TEST POLICY CONSTRAINTS.
+# These are deliberately tighter than `policy:` in configs/hardware.yaml so that the
+# constraint mechanism binds and the constrained-vs-unconstrained comparison is
+# non-degenerate. They are NOT physical limits of the ROCK 5C.
+#
+# Verified against implementation/runtime/edge_profile.py (see
+# tools/validate_pipeline.py check 7): with these thresholds, exactly 4/18 actions
+# violate at least one constraint -- yolo11m/640/fp32, yolo11m/960/fp16,
+# yolo11m/960/fp32, yolo11s/960/fp32.
+quality_backend: proxy
+w_quality: 2.0
+w_latency: 1.0
+w_compute: 0.3
+w_switch: 0.3
+target_count: 10.0
+max_latency_ms: 100.0
+min_fps: 15.0
+labels_path: null
+latency_source: edge_profile
+latency_jitter_ms: 0.0
+constraints:
+  max_power_w: 10.0        # tighter than policy.power_budget_w (40.0)
+  max_memory_mb: 300.0      # tighter than policy.inference_memory_budget_mb (512.0)
+  max_npu_util: 75.0
+  max_temp_c: 65.0
+  max_latency_ms: 100.0
+constraint_weights:
+  max_power_w: 3.0
+  max_memory_mb: 3.0
+  max_npu_util: 1.0
+  max_temp_c: 2.0
+  max_latency_ms: 1.0
