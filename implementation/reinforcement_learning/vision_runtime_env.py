@@ -8,8 +8,9 @@ import numpy as np
 from gymnasium import spaces
 
 from ..model_management.runtime_config_space import ConfigSpace
+from ..runtime.edge_profile import EdgeProfile, compute_constraint_violations
 from ..runtime.latency_estimator import LatencyEstimator
-from ..runtime.system_telemetry import Telemetry
+from ..runtime.system_telemetry import GpuSnapshot, Telemetry
 from ..vision_pipeline.video_frame_source import DatasetVideoSource, FrameSource
 from ..vision_pipeline.yolo_detector import Detector, Detections
 from ..vision_pipeline.scene_analyzer import SceneAnalyzer, SceneFeatures
@@ -33,6 +34,7 @@ class VisionRuntimeEnv(gym.Env):
         latency_estimator: Optional[LatencyEstimator] = None,
         max_episode_frames: Optional[int] = None,
         episode_min_frames: int = 150,
+        edge_profile: Optional[EdgeProfile] = None,
     ):
         super().__init__()
         self.frame_source = frame_source
@@ -44,6 +46,7 @@ class VisionRuntimeEnv(gym.Env):
         self.telemetry = telemetry or Telemetry()
         self.frame_step = max(1, int(frame_step))
         self.latency_estimator = latency_estimator
+        self.edge_profile = edge_profile
         self.max_episode_frames = max_episode_frames
         self.episode_min_frames = max(1, int(episode_min_frames))
 
@@ -75,6 +78,8 @@ class VisionRuntimeEnv(gym.Env):
         self._prev_action = None
         self.telemetry.reset()
         self.analyzer.reset()
+        if self.edge_profile is not None:
+            self.edge_profile.reset()
 
         frame = next(self._frames, None)
         if frame is None:
@@ -121,7 +126,7 @@ class VisionRuntimeEnv(gym.Env):
             self._prev_action,
             action,
         )
-        self._prev_action = self._current_action
+        self._prev_action = action
         self._current_action = action
 
         obs = self.features.build(scene, self.telemetry, action)
@@ -137,10 +142,30 @@ class VisionRuntimeEnv(gym.Env):
             )
             if latency > 0:
                 self.telemetry.latencies_ms[-1] = latency
+        if self.edge_profile is not None:
+            snap = self.edge_profile.snapshot(config)
+            self.telemetry.record_gpu(
+                GpuSnapshot(
+                    npu_util_pct=snap.npu_util_pct,
+                    mem_used_mb=snap.mem_used_mb,
+                    mem_budget_mb=self.edge_profile.memory_budget_mb,
+                    temp_c=snap.temp_c,
+                    power_w=snap.power_w,
+                    latency_ms=snap.latency_ms,
+                )
+            )
         return detections
 
     def _make_info(self, detections: Detections, obs, reward: float) -> dict:
         scene = self._scene
+        config = self.config_space.action_to_config(self._current_action)
+        gpu = self.telemetry.gpu
+        constraints = getattr(self.reward.cfg, "constraints", None) or {}
+        violations = (
+            compute_constraint_violations(gpu.as_dict(), constraints)
+            if gpu is not None and constraints
+            else {}
+        )
         return {
             "frame": self._frame_idx,
             "detections": len(detections),
@@ -149,7 +174,15 @@ class VisionRuntimeEnv(gym.Env):
             "latency_ms": self.telemetry.last_latency_ms(),
             "fps": self.telemetry.fps(),
             "action": self._current_action,
-            "model": self.config_space.action_to_config(self._current_action).model,
+            "model": config.model,
+            "resolution": config.resolution,
+            "precision": config.precision,
+            "npu_util_pct": gpu.npu_util_pct if gpu is not None else 0.0,
+            "mem_used_mb": gpu.mem_used_mb if gpu is not None else 0.0,
+            "power_w": gpu.power_w if gpu is not None else 0.0,
+            "temp_c": gpu.temp_c if gpu is not None else 0.0,
+            "constraint_violations": violations,
+            "constraint_violation_count": len(violations),
             "video": (
                 self.frame_source.current_path.name
                 if isinstance(self.frame_source, DatasetVideoSource)
