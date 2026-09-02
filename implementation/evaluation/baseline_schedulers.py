@@ -18,6 +18,10 @@ class Policy:
     def update(self, obs: np.ndarray, info: dict, reward: float, action: int) -> None:
         pass
 
+    def reset(self) -> None:
+        """Reset any per-episode/per-video learning state. No-op for fixed policies."""
+        pass
+
 
 class AlwaysModel(Policy):
     def __init__(self, n_actions: int, action: int):
@@ -47,10 +51,14 @@ class RandomPolicy(Policy):
     def __init__(self, n_actions: int, seed: int = 0):
         super().__init__(n_actions)
         self.name = "random"
+        self._seed = seed
         self._rng = np.random.default_rng(seed)
 
     def choose(self, obs: np.ndarray, info: dict) -> int:
         return int(self._rng.integers(0, self.n_actions))
+
+    def reset(self) -> None:
+        self._rng = np.random.default_rng(self._seed)
 
 
 class RuleBasedPolicy(Policy):
@@ -85,7 +93,13 @@ class ContextualBandit(Policy):
         self.name = "contextual_bandit"
         self.n_bins = int(n_bins)
         self.epsilon = float(epsilon)
+        self._seed = seed
         self._rng = np.random.default_rng(seed)
+        self._q = np.zeros((self.n_bins, self.n_actions))
+        self._n = np.zeros((self.n_bins, self.n_actions))
+
+    def reset(self) -> None:
+        self._rng = np.random.default_rng(self._seed)
         self._q = np.zeros((self.n_bins, self.n_actions))
         self._n = np.zeros((self.n_bins, self.n_actions))
 

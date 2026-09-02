@@ -66,6 +66,14 @@ def run_episode(env: VisionRuntimeEnv, policy: Policy, max_steps: int | None = N
     counts: list[int] = []
     rewards: list[float] = []
     fps_samples: list[float] = []
+    npu_utils: list[float] = []
+    mems: list[float] = []
+    powers: list[float] = []
+    temps: list[float] = []
+    violation_frames = 0
+    model_counts: dict[str, int] = {}
+    resolution_counts: dict[int, int] = {}
+    precision_counts: dict[str, int] = {}
     bin_rewards: dict[str, list[float]] = {"sparse": [], "mid": [], "dense": []}
 
     done = False
@@ -84,6 +92,15 @@ def run_episode(env: VisionRuntimeEnv, policy: Policy, max_steps: int | None = N
         counts.append(int(info["obj_count"]))
         rewards.append(float(reward))
         fps_samples.append(float(info["fps"]))
+        npu_utils.append(float(info["npu_util_pct"]))
+        mems.append(float(info["mem_used_mb"]))
+        powers.append(float(info["power_w"]))
+        temps.append(float(info["temp_c"]))
+        if info["constraint_violation_count"] > 0:
+            violation_frames += 1
+        model_counts[info["model"]] = model_counts.get(info["model"], 0) + 1
+        resolution_counts[info["resolution"]] = resolution_counts.get(info["resolution"], 0) + 1
+        precision_counts[info["precision"]] = precision_counts.get(info["precision"], 0) + 1
         bin_rewards[_bin_label(float(info["obj_count"]))].append(float(reward))
         prev_action = action
         done = terminated or truncated
@@ -97,11 +114,98 @@ def run_episode(env: VisionRuntimeEnv, policy: Policy, max_steps: int | None = N
         "mean_count": float(np.mean(counts)) if counts else 0.0,
         "mean_latency_ms": float(np.mean(latencies)) if latencies else 0.0,
         "mean_fps": float(np.mean(fps_samples)) if fps_samples else 0.0,
+        "mean_npu_util": float(np.mean(npu_utils)) if npu_utils else 0.0,
+        "mean_mem_mb": float(np.mean(mems)) if mems else 0.0,
+        "mean_power_w": float(np.mean(powers)) if powers else 0.0,
+        "peak_temp_c": float(np.max(temps)) if temps else 0.0,
+        "violation_count": int(violation_frames),
+        "violation_rate": violation_frames / steps if steps else 0.0,
         "switches": switches,
         "switch_rate": switches / steps if steps else 0.0,
+        "model_counts": model_counts,
+        "resolution_counts": resolution_counts,
+        "precision_counts": precision_counts,
         "bin_rewards": {k: (float(np.mean(v)) if v else 0.0) for k, v in bin_rewards.items()},
         "bin_frame_counts": {k: len(v) for k, v in bin_rewards.items()},
     }
+
+
+def _config_breakdown_keys(env: VisionRuntimeEnv) -> tuple[list[str], list[int], list[str]]:
+    """Canonical (models, resolutions, precisions) for CSV column naming.
+
+    Derived via `action_to_config` over the full action space -- never via
+    `ConfigSpace.models`'s positional order, which differs from the action
+    enumeration (model-major itertools.product order).
+    """
+    configs = [env.config_space.action_to_config(i) for i in range(env.action_space.n)]
+    models = sorted({c.model for c in configs})
+    resolutions = sorted({c.resolution for c in configs})
+    precisions = sorted({c.precision for c in configs})
+    return models, resolutions, precisions
+
+
+def _row_with_breakdown(
+    r: dict, models: list[str], resolutions: list[int], precisions: list[str]
+) -> dict:
+    steps = max(1, int(r["steps"]))
+    row = {
+        k: v
+        for k, v in r.items()
+        if k
+        not in (
+            "bin_rewards",
+            "bin_frame_counts",
+            "model_counts",
+            "resolution_counts",
+            "precision_counts",
+        )
+    }
+    row["bin_sparse_reward"] = r["bin_rewards"]["sparse"]
+    row["bin_mid_reward"] = r["bin_rewards"]["mid"]
+    row["bin_dense_reward"] = r["bin_rewards"]["dense"]
+    row["bin_sparse_frames"] = r["bin_frame_counts"]["sparse"]
+    row["bin_mid_frames"] = r["bin_frame_counts"]["mid"]
+    row["bin_dense_frames"] = r["bin_frame_counts"]["dense"]
+    for m in models:
+        row[f"model_frac_{m}"] = r["model_counts"].get(m, 0) / steps
+    for res in resolutions:
+        row[f"resolution_frac_{res}"] = r["resolution_counts"].get(res, 0) / steps
+    for prec in precisions:
+        row[f"precision_frac_{prec}"] = r["precision_counts"].get(prec, 0) / steps
+    return row
+
+
+def _csv_fieldnames(models: list[str], resolutions: list[int], precisions: list[str]) -> list[str]:
+    return (
+        [
+            "video",
+            "policy",
+            "steps",
+            "total_reward",
+            "mean_reward",
+            "mean_conf",
+            "mean_count",
+            "mean_latency_ms",
+            "mean_fps",
+            "mean_npu_util",
+            "mean_mem_mb",
+            "mean_power_w",
+            "peak_temp_c",
+            "violation_count",
+            "violation_rate",
+            "switches",
+            "switch_rate",
+            "bin_sparse_reward",
+            "bin_mid_reward",
+            "bin_dense_reward",
+            "bin_sparse_frames",
+            "bin_mid_frames",
+            "bin_dense_frames",
+        ]
+        + [f"model_frac_{m}" for m in models]
+        + [f"resolution_frac_{res}" for res in resolutions]
+        + [f"precision_frac_{prec}" for prec in precisions]
+    )
 
 
 def compare_policies(
@@ -117,6 +221,7 @@ def compare_policies(
     for policy in policies:
         per_episode = []
         for _ in range(episodes):
+            policy.reset()
             env = env_builder()
             per_episode.append(run_episode(env, policy, max_steps=max_steps))
         results[policy.name] = per_episode
@@ -141,13 +246,20 @@ def compare_policies(
                 "mean_count",
                 "mean_latency_ms",
                 "mean_fps",
+                "mean_npu_util",
+                "mean_mem_mb",
+                "mean_power_w",
+                "peak_temp_c",
+                "violation_count",
+                "violation_rate",
                 "switches",
                 "switch_rate",
             ],
         )
         writer.writeheader()
         for per_episode in results.values():
-            writer.writerows(per_episode)
+            for r in per_episode:
+                writer.writerow({k: v for k, v in r.items() if k in writer.fieldnames})
     print(f"benchmark written to {path}")
     return results
 
@@ -170,11 +282,16 @@ def compare_policies_dataset(
     progress = EvalProgress(progress_every) if progress_every else None
     results: dict[str, list[dict]] = {}
     n_videos = len(video_paths)
+
+    probe_env = env_builder(video_paths[0])
+    models, resolutions, precisions = _config_breakdown_keys(probe_env)
+
     for p_idx, policy in enumerate(policies):
         if progress:
             progress.begin(n_videos, f"{policy.name}")
         per_video: list[dict] = []
         for v_idx, path in enumerate(video_paths):
+            policy.reset()
             env = env_builder(path)
             row = run_episode(env, policy)
             row["video"] = Path(path).name
@@ -188,6 +305,7 @@ def compare_policies_dataset(
         counts = np.array([r["mean_count"] for r in per_video])
         lats = np.array([r["mean_latency_ms"] for r in per_video])
         sw = np.array([r["switches"] for r in per_video])
+        viol = np.array([r["violation_rate"] for r in per_video])
         bin_rows = []
         for b in ("sparse", "mid", "dense"):
             vals = []
@@ -201,60 +319,35 @@ def compare_policies_dataset(
             f"conf={confs.mean():.3f} count={counts.mean():5.1f} "
             f"lat={lats.mean():6.1f}ms "
             f"fps={np.array([r['mean_fps'] for r in per_video]).mean():6.1f} "
-            f"switches={sw.mean():6.1f} | " + " ".join(bin_rows)
+            f"switches={sw.mean():6.1f} viol_rate={viol.mean() * 100:4.1f}% | " + " ".join(bin_rows)
         )
 
     csv_path = out_dir / output_filename
+    fieldnames = _csv_fieldnames(models, resolutions, precisions)
     with open(csv_path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=[
-                "video",
-                "policy",
-                "steps",
-                "total_reward",
-                "mean_reward",
-                "mean_conf",
-                "mean_count",
-                "mean_latency_ms",
-                "mean_fps",
-                "switches",
-                "switch_rate",
-                "bin_sparse_reward",
-                "bin_mid_reward",
-                "bin_dense_reward",
-            ],
-        )
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
         for per_video in results.values():
             for r in per_video:
-                writer.writerow(
-                    {
-                        **{
-                            k: v
-                            for k, v in r.items()
-                            if k not in ("bin_rewards", "bin_frame_counts")
-                        },
-                        "bin_sparse_reward": r["bin_rewards"]["sparse"],
-                        "bin_mid_reward": r["bin_rewards"]["mid"],
-                        "bin_dense_reward": r["bin_rewards"]["dense"],
-                    }
-                )
+                writer.writerow(_row_with_breakdown(r, models, resolutions, precisions))
     print(f"dataset benchmark written to {csv_path}")
+
     return results
 
 
-def _load_configs(env_path: str, variants_path: str, reward_path: str):
+def _load_configs(env_path: str, variants_path: str, reward_path: str, hardware_path: str = None):
     from ..runtime.environment_factory import build_env_from_configs, load_yaml
 
     env_cfg = load_yaml(env_path)
     variants_cfg = load_yaml(variants_path)
     reward_cfg = load_yaml(reward_path)
+    hardware_cfg = load_yaml(hardware_path) if hardware_path else None
     return (
         env_cfg,
         variants_cfg,
         reward_cfg,
-        build_env_from_configs(env_cfg, variants_cfg, reward_cfg),
+        hardware_cfg,
+        build_env_from_configs(env_cfg, variants_cfg, reward_cfg, hardware_cfg=hardware_cfg),
     )
 
 
@@ -271,21 +364,26 @@ if __name__ == "__main__":
     parser.add_argument("--env", default="configs/env_bdd.yaml")
     parser.add_argument("--variants", default="configs/variants.yaml")
     parser.add_argument("--reward", default="configs/reward_bdd.yaml")
+    parser.add_argument("--hardware", default="configs/hardware.yaml", help="hardware profile yaml")
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=None)
-    parser.add_argument("--dataset", choices=["train", "validation", "test"], default=None)
+    parser.add_argument("--dataset", choices=["training", "validation", "test"], default=None)
     parser.add_argument("--n-videos", type=int, default=None, help="limit videos (default: all)")
     parser.add_argument("--model", default=None, help="path to a saved SB3 DQN/PPO zip")
     parser.add_argument("--model-name", default=None, help="label for the loaded model")
     parser.add_argument("--policies", default=None, help="comma-separated baseline names override")
     args = parser.parse_args()
 
-    env_cfg, variants_cfg, reward_cfg, env = _load_configs(args.env, args.variants, args.reward)
+    env_cfg, variants_cfg, reward_cfg, hardware_cfg, env = _load_configs(
+        args.env, args.variants, args.reward, args.hardware
+    )
 
     def builder_for(path: str = None):
         from ..runtime.environment_factory import build_env_from_configs
 
-        return build_env_from_configs(env_cfg, variants_cfg, reward_cfg, video_override=path)
+        return build_env_from_configs(
+            env_cfg, variants_cfg, reward_cfg, video_override=path, hardware_cfg=hardware_cfg
+        )
 
     policies = default_baselines(env)
     if args.policies:
