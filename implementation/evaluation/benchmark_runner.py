@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
+from scipy import stats as scipy_stats
 
 from ..reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
 from .baseline_schedulers import Policy, default_baselines
@@ -208,6 +209,96 @@ def _csv_fieldnames(models: list[str], resolutions: list[int], precisions: list[
     )
 
 
+def paired_comparison(rewards_a: np.ndarray, rewards_b: np.ndarray) -> dict:
+    """Paired per-video comparison of `a` (candidate) vs `b` (reference).
+
+    Assumes both arrays are per-video total_reward over the *same* videos in the
+    *same* order (true for compare_policies_dataset, which runs every policy over
+    an identical video list).
+    """
+    diff = rewards_a - rewards_b
+    n = len(diff)
+    mean_diff = float(np.mean(diff)) if n else 0.0
+    if n > 1 and np.std(diff, ddof=1) > 0:
+        t_stat, p_value = scipy_stats.ttest_rel(rewards_a, rewards_b)
+        sem = float(np.std(diff, ddof=1) / np.sqrt(n))
+        t_crit = float(scipy_stats.t.ppf(0.975, df=n - 1))
+        ci_lo = mean_diff - t_crit * sem
+        ci_hi = mean_diff + t_crit * sem
+    else:
+        t_stat, p_value = float("nan"), float("nan")
+        ci_lo, ci_hi = mean_diff, mean_diff
+    win_rate = float(np.mean(diff > 0)) if n else 0.0
+    return {
+        "n": n,
+        "mean_a": float(np.mean(rewards_a)) if n else 0.0,
+        "mean_b": float(np.mean(rewards_b)) if n else 0.0,
+        "mean_delta": mean_diff,
+        "t_stat": float(t_stat),
+        "p_value": float(p_value),
+        "ci95_lo": float(ci_lo),
+        "ci95_hi": float(ci_hi),
+        "win_rate": win_rate,
+    }
+
+
+def compare_policies_stats(results: dict[str, list[dict]], reference: str) -> list[dict]:
+    """Paired t-test + win rate + 95% CI of every other policy vs `reference`."""
+    if reference not in results:
+        return []
+    ref_rewards = np.array([r["total_reward"] for r in results[reference]])
+    rows = []
+    for name, per_video in results.items():
+        if name == reference:
+            continue
+        rewards = np.array([r["total_reward"] for r in per_video])
+        if len(rewards) != len(ref_rewards):
+            continue
+        stat = paired_comparison(rewards, ref_rewards)
+        stat["policy"] = name
+        stat["reference"] = reference
+        rows.append(stat)
+    return rows
+
+
+def _print_stats(rows: list[dict]) -> None:
+    if not rows:
+        return
+    print("\n=== paired comparison vs reference (per-video total_reward) ===")
+    for row in rows:
+        ci = f"[{row['ci95_lo']:+.2f}, {row['ci95_hi']:+.2f}]"
+        print(
+            f"{row['policy']:<30} vs {row['reference']:<20} "
+            f"delta={row['mean_delta']:+7.2f} (95% CI {ci}) "
+            f"t={row['t_stat']:+.2f} p={row['p_value']:.2e} win_rate={row['win_rate'] * 100:5.1f}%"
+        )
+
+
+def _write_stats_csv(path: Path, rows: list[dict]) -> None:
+    if not rows:
+        return
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=[
+                "policy",
+                "reference",
+                "n",
+                "mean_a",
+                "mean_b",
+                "mean_delta",
+                "t_stat",
+                "p_value",
+                "ci95_lo",
+                "ci95_hi",
+                "win_rate",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"stats written to {path}")
+
+
 def compare_policies(
     env_builder: Callable[[], VisionRuntimeEnv],
     policies: list[Policy],
@@ -271,11 +362,15 @@ def compare_policies_dataset(
     output_dir: str = "output",
     output_filename: str = "benchmark_dataset.csv",
     progress_every: int | None = None,
+    stats_reference: str | None = None,
 ) -> dict[str, list[dict]]:
     """Run every policy over a list of videos; aggregate mean +/- std + density bins.
 
     progress_every: print a live progress line every N videos per policy (train-style
     bar). None disables live progress (still prints the per-policy summary rows).
+    stats_reference: policy name to run paired t-tests / win rates / CIs against
+    (default: the last policy in `policies`, which callers append the trained
+    model as).
     """
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -331,6 +426,13 @@ def compare_policies_dataset(
             for r in per_video:
                 writer.writerow(_row_with_breakdown(r, models, resolutions, precisions))
     print(f"dataset benchmark written to {csv_path}")
+
+    reference = stats_reference or (policies[-1].name if policies else None)
+    if reference:
+        stats_rows = compare_policies_stats(results, reference)
+        _print_stats(stats_rows)
+        stats_path = out_dir / f"{Path(output_filename).stem}_stats.csv"
+        _write_stats_csv(stats_path, stats_rows)
 
     return results
 
