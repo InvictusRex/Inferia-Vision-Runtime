@@ -39,10 +39,11 @@ def main():
     parser.add_argument("--env", default="configs/env_bdd.yaml")
     parser.add_argument("--variants", default="configs/variants.yaml")
     parser.add_argument("--reward", default="configs/reward_bdd.yaml")
+    parser.add_argument("--hardware", default="configs/hardware.yaml", help="hardware profile yaml")
     parser.add_argument(
         "--dataset",
         default="test",
-        choices=["train", "validation", "test"],
+        choices=["training", "validation", "test"],
         help="BDD-100K split to evaluate (default: test)",
     )
     parser.add_argument("--model", default="training/dqn_bdd_final.zip")
@@ -66,6 +67,13 @@ def main():
         default=None,
         help="comma-separated baseline names override (default: all baselines + model)",
     )
+    parser.add_argument("--w-switch", type=float, default=None, help="override reward w_switch")
+    parser.add_argument(
+        "--constraints",
+        choices=["on", "off"],
+        default=None,
+        help="toggle constraint penalties in the reward (default: yaml value)",
+    )
     args = parser.parse_args()
 
     from implementation.evaluation.benchmark_runner import (  # noqa: E402
@@ -85,10 +93,22 @@ def main():
 
     variants_cfg = load_yaml(args.variants)
     reward_cfg = load_yaml(args.reward)
-    env = build_env_from_configs(env_cfg, variants_cfg, reward_cfg)
+    if args.w_switch is not None:
+        reward_cfg["w_switch"] = args.w_switch
+    if args.constraints is not None:
+        if args.constraints == "off":
+            reward_cfg["constraints"] = {}
+        else:
+            base = load_yaml("configs/reward_constrained_bdd.yaml")
+            reward_cfg["constraints"] = base.get("constraints", {})
+            reward_cfg["constraint_weights"] = base.get("constraint_weights", {})
+    hardware_cfg = load_yaml(args.hardware)
+    env = build_env_from_configs(env_cfg, variants_cfg, reward_cfg, hardware_cfg=hardware_cfg)
 
     def builder_for(path: str = None):
-        return build_env_from_configs(env_cfg, variants_cfg, reward_cfg, video_override=path)
+        return build_env_from_configs(
+            env_cfg, variants_cfg, reward_cfg, video_override=path, hardware_cfg=hardware_cfg
+        )
 
     policies = default_baselines(env)
     if args.policies:
