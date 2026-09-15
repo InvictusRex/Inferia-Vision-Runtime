@@ -92,6 +92,8 @@ These decisions were confirmed with the project owner and are binding:
 | **Hardware telemetry** | Deferred to Phase 2 (`pynvml`) | Phase 1 uses inference latency/FPS only |
 | **Weights source** | Official `yolo11n/s/m.pt`, downloaded into `weights/` | Already fetched; re-downloadable on demand |
 | **Action space** | Flattened **discrete** combos: model × resolution × precision | DQN-friendly; env designed to extend to hierarchical later |
+| **Hardware emulation** | **Emulated edge profile** (`EdgeProfile`, Phase 2b): nominal Rock 5C values for VRAM / GPU util / power / temp / latency per config | Live 4060 NVML is **debug-only**, never in reward/obs — live device state collapses the policy to always-nano (Phase 1 lesson) |
+| **Constraint semantics** | Heavy **reward penalty** proportional to violation fraction (no action masking) | Keeps DQN/PPO stock; validated 2026-08-08 |
 | **Layout/tooling** | `implementation/` package, ruff + type hints, `pyproject.toml` | Minimal but clean |
 | **Phase scope** | Full 4-phase roadmap planned; **implementation is YOLO-only until non-YOLO integration phase** | Model-agnostic interfaces kept throughout |
 
@@ -207,6 +209,33 @@ optimization" layer from §10 of the original vision):
 - **Soft priorities (reward weights):** e.g. `accuracy: 0.6`, `energy: 0.2`,
   `stability: 0.2`. A config can demand "keep 30 FPS no matter what" or
   "maximize quality, speed flexible."
+
+#### 6.8.1 Edge emulation (`EdgeProfile`, Phase 2b)
+
+Constraints are evaluated against **nominal Rock 5C values**, never the training
+GPU (RTX 4060) — the 4060's 8 GB VRAM / ~115 W TDP would make VRAM/power
+constraints meaningless, and live thermal noise collapses the policy (Phase 1
+lesson). `EdgeProfile` (Phase 2b) extends `LatencyEstimator` with emulated,
+per-config metrics, all placeholders until Phase 3 real benchmarking:
+
+| Metric | Emulation model |
+|---|---|
+| **VRAM** | per-model `edge_vram_mb` × precision bytes (fp32 1.0 / fp16 0.5) + activation ∝ (res/640)² |
+| **GPU util** | `gflops × (res/640)² × precision_factor / (TOPS × eff)` |
+| **Power** | base W + load × per-TOPS factor |
+| **Temp** | ambient + load·k (optional EWMA time constant) |
+| **Latency** | existing `LatencyEstimator` (n 18 / s 45 / m 120 ms @640) |
+
+- Profile lives in `configs/hardware.yaml` (TOPS, VRAM budget, TDP, ambient);
+  per-model `edge_vram_mb` added to `configs/variants.yaml`.
+- Reward constraints (`max_vram_mb`, `max_power_w`, `max_gpu_temp_c`,
+  `max_latency_ms`, `min_fps`, `max_gpu_util`) read **emulated** values; heavy
+  penalty ∝ violation fraction (no action masking).
+- Observation dims 10–13 (util/vram/temp/power) are **emulated edge metrics of
+  the current action** — deterministic and consistent with reward, so the agent
+  learns "this config uses X% of my edge budget."
+- Live 4060 NVML (`pynvml`) is a **debug/validation hook only**, gated off by
+  default — never in reward or the constraint basis.
 
 ### 6.9 Temporal Decision Making
 
@@ -348,10 +377,14 @@ comparison, `--model` to add a trained DQN) and
   still leads overall — BDD-A is mostly mid/sparse density where nano's cheap
   latency wins the tuned reward. DQN dominates dense scenes (291.6 vs nano
   257.1 / small 250.2). Details in `docs/knowledge_graph.json` → `phase_2a_bdd_training`.)
-- [ ] PPO alongside DQN (`train_runtime.py --algorithm ppo`)
-- [ ] NVML telemetry (VRAM, util, GPU temp, power) into observations
-- [ ] Constraint-aware rewards (hard constraints + priority weights)
-- [ ] Switching-penalty tuning
+- [ ] PPO alongside DQN (`sweep.py`; PPO 300k + w_switch sweep)
+- [x] **EdgeProfile hardware emulation** (`EdgeProfile` for VRAM/util/power/temp;
+      constraint-aware reward with heavy penalties; obs 10→14 dims w/ emulated
+      GPU metrics) — built 2026-08-08, smoke-tested
+- [ ] NVML telemetry (debug/validation hook only, gated off by default)
+- [x] Constraint-aware rewards (hard constraints + priority weights) — built
+      2026-08-08 (`configs/reward_constrained_bdd.yaml`, `--constraints on|off`)
+- [ ] Switching-penalty tuning (`sweep.py --sweep-values`, results pending)
 
 ### Phase 3 — Edge Runtime
 - [ ] TensorRT and ONNX Runtime backends behind `Detector` interface
@@ -443,6 +476,11 @@ models integrate without changing the core runtime architecture.
   for training until Phase 3 benchmarks the real Radxa Rock 5C; `LatencyEstimator`
   will then be calibrated from measured numbers. Phase 2a adds placeholder scaling:
   latency ∝ `(resolution/640)²` and a `fp16` factor of `0.6`.
+- **Phase 2b hardware emulation is placeholder-based** (VRAM/util/power/temp curves
+  are estimates for the Rock 5C 6 TOPS NPU / ~2-4 GB LPDDR / ~5 W TDP). All
+  `EdgeProfile` numbers are to be calibrated with measured values in Phase 3;
+  observation dims 10–13 and the constraint penalties are only as good as these
+  placeholders.
 - **BDD-A training data** lives **outside the repo** as a sibling directory:
   `../BDDA/BDDA/{training,validation,test}/camera_videos/` (relative to the repo
   root). Only `camera_videos/` are used (gazemap/gps removed). Referenced via
