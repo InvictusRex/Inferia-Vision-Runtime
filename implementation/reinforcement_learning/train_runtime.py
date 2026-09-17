@@ -157,6 +157,7 @@ def train(
             gae_lambda=float(training_cfg.get("gae_lambda", 0.95)),
             clip_range=float(training_cfg.get("clip_range", 0.2)),
             ent_coef=float(training_cfg.get("ent_coef", 0.0)),
+            target_kl=training_cfg.get("target_kl"),
         )
     else:
         model = DQN(
