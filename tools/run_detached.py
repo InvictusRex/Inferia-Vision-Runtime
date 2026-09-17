@@ -82,7 +82,9 @@ def _worker(run_dir: Path) -> None:
         log_fh.write(f"\n=== worker start {_now()} ===\ncommand: {cmd}\ncwd: {meta['cwd']}\n\n")
         log_fh.flush()
         try:
-            proc = subprocess.Popen(cmd, cwd=meta["cwd"], stdout=log_fh, stderr=subprocess.STDOUT)
+            proc = subprocess.Popen(
+                cmd, cwd=meta["cwd"], stdout=log_fh, stderr=subprocess.STDOUT, **_detach_kwargs()
+            )
         except OSError as exc:
             meta["status"] = "failed"
             meta["exit_code"] = None
