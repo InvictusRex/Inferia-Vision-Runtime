@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from ..runtime.edge_profile import compute_constraint_violations
 from ..runtime.system_telemetry import Telemetry
 from ..vision_pipeline.yolo_detector import Detections
@@ -39,11 +41,19 @@ class RewardCalculator:
         telemetry: Telemetry,
         prev_action: int | None,
         action: int,
+        gt_boxes: np.ndarray | None = None,
     ) -> float:
         raise NotImplementedError
 
 
 class ProxyReward(RewardCalculator):
+    def _quality(
+        self, detections: Detections, scene: SceneFeatures, gt_boxes: np.ndarray | None
+    ) -> float:
+        count = len(detections)
+        mean_conf = float(detections.confs.mean()) if count else 0.0
+        return mean_conf * (count / max(self.cfg.target_count, 1e-6))
+
     def compute(
         self,
         detections: Detections,
@@ -51,11 +61,10 @@ class ProxyReward(RewardCalculator):
         telemetry: Telemetry,
         prev_action: int | None,
         action: int,
+        gt_boxes: np.ndarray | None = None,
     ) -> float:
         cfg = self.cfg
-        count = len(detections)
-        mean_conf = float(detections.confs.mean()) if count else 0.0
-        quality = mean_conf * (count / max(cfg.target_count, 1e-6))
+        quality = self._quality(detections, scene, gt_boxes)
         stability = float(scene.temporal_consistency)
         quality_term = cfg.w_quality * (0.7 * quality + 0.3 * stability)
 
@@ -94,6 +103,7 @@ class MapReward(RewardCalculator):
         telemetry: Telemetry,
         prev_action: int | None,
         action: int,
+        gt_boxes: np.ndarray | None = None,
     ) -> float:
         if not self.cfg.labels_path:
             raise NotImplementedError(
