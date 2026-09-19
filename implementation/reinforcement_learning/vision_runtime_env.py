@@ -11,7 +11,7 @@ from ..model_management.runtime_config_space import ConfigSpace
 from ..runtime.edge_profile import EdgeProfile, compute_constraint_violations
 from ..runtime.latency_estimator import LatencyEstimator
 from ..runtime.system_telemetry import GpuSnapshot, Telemetry
-from ..vision_pipeline.video_frame_source import DatasetVideoSource, FrameSource
+from ..vision_pipeline.video_frame_source import FrameSource
 from ..vision_pipeline.yolo_detector import Detector, Detections
 from ..vision_pipeline.scene_analyzer import SceneAnalyzer, SceneFeatures
 from .observation_features import FeatureBuilder
@@ -63,7 +63,7 @@ class VisionRuntimeEnv(gym.Env):
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
-        if isinstance(self.frame_source, DatasetVideoSource):
+        if hasattr(self.frame_source, "random_episode"):
             self.frame_source.random_episode(
                 min_frames=self.episode_min_frames,
                 max_frames=self.max_episode_frames or self.frame_source.frame_count,
@@ -119,12 +119,16 @@ class VisionRuntimeEnv(gym.Env):
         self._scene = scene
         self._frame_idx += 1
 
+        gt_boxes = None
+        if hasattr(self.frame_source, "gt_for_current_frame"):
+            gt_boxes = self.frame_source.gt_for_current_frame()
         reward = self.reward.compute(
             detections,
             scene,
             self.telemetry,
             self._prev_action,
             action,
+            gt_boxes=gt_boxes,
         )
         self._prev_action = action
         self._current_action = action
@@ -185,7 +189,7 @@ class VisionRuntimeEnv(gym.Env):
             "constraint_violation_count": len(violations),
             "video": (
                 self.frame_source.current_path.name
-                if isinstance(self.frame_source, DatasetVideoSource)
+                if hasattr(self.frame_source, "current_path")
                 else "single"
             ),
             "reward": float(reward),
