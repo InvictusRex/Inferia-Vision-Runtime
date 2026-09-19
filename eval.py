@@ -84,7 +84,10 @@ def main():
         SB3Policy,
         default_baselines,
     )
-    from implementation.runtime.environment_factory import build_env_from_configs  # noqa: E402
+    from implementation.runtime.environment_factory import (  # noqa: E402
+        build_env_from_configs,
+        detrac_sequence_dirs,
+    )
     from stable_baselines3 import DQN, PPO  # noqa: E402
 
     env_cfg = load_yaml(args.env)
@@ -126,7 +129,11 @@ def main():
     model_name = args.model_name or f"ivr_{model_path.stem}"
     policies.append(SB3Policy(model, name=model_name))
 
-    videos = _split_videos(env_cfg.get("dataset_dir", "../BDDA/BDDA"), args.dataset)
+    if env_cfg.get("dataset_type") == "detrac":
+        detrac_split = "train" if args.dataset == "training" else "test"
+        videos = detrac_sequence_dirs(env_cfg["dataset_dir"], detrac_split)
+    else:
+        videos = _split_videos(env_cfg.get("dataset_dir", "../BDDA/BDDA"), args.dataset)
     if args.n_videos:
         videos = videos[: args.n_videos]
 
