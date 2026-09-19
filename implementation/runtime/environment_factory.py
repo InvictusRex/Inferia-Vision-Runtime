@@ -10,6 +10,7 @@ from ..model_management.model_variants import build_variants
 from ..runtime.edge_profile import EdgeProfile
 from ..runtime.latency_estimator import LatencyEstimator
 from ..runtime.system_telemetry import Telemetry
+from ..vision_pipeline.detrac_source import DetracFrameSource
 from ..vision_pipeline.video_frame_source import DatasetVideoSource, VideoFrameSource
 from ..vision_pipeline.yolo_detector import Detector
 from ..vision_pipeline.scene_analyzer import SceneAnalyzer
@@ -21,6 +22,22 @@ from ..reinforcement_learning.reward_calculator import RewardConfig, build_rewar
 def load_yaml(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
+
+
+def detrac_xml_dir(dataset_dir: str, split: str) -> Path:
+    folder = "DETRAC-Train-Annotations-XML" if split == "train" else "DETRAC-Test-Annotations-XML"
+    return Path(dataset_dir) / folder / folder
+
+
+def detrac_sequence_dirs(dataset_dir: str, split: str) -> list[str]:
+    images_dir = Path(dataset_dir) / "DETRAC-Images" / "DETRAC-Images"
+    xml_dir = detrac_xml_dir(dataset_dir, split)
+    seq_dirs = sorted(
+        str(p) for p in images_dir.iterdir() if p.is_dir() and (xml_dir / f"{p.name}.xml").exists()
+    )
+    if not seq_dirs:
+        raise FileNotFoundError(f"no {split} sequences found under {images_dir}")
+    return seq_dirs
 
 
 def build_env_from_configs(
@@ -85,7 +102,17 @@ def build_env_from_configs(
     else:
         features = FeatureBuilder(n_actions=config_space.n_actions)
 
-    if video_override is not None:
+    if env_cfg.get("dataset_type") == "detrac":
+        dataset_dir = env_cfg["dataset_dir"]
+        split = str(env_cfg.get("dataset_split", "train"))
+        seq_dirs = (
+            [str(video_override)] if video_override is not None
+            else detrac_sequence_dirs(dataset_dir, split)
+        )
+        source = DetracFrameSource(
+            seq_dirs, str(detrac_xml_dir(dataset_dir, split)), seed=int(env_cfg.get("seed", 0))
+        )
+    elif video_override is not None:
         source = VideoFrameSource(str(video_override))
     else:
         dataset_dir = env_cfg.get("dataset_dir")
