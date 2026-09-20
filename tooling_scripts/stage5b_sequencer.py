@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tools.run_detached import _now, _read_meta, launch  # noqa: E402
+from tooling_scripts.run_detached import _now, _read_meta, launch  # noqa: E402
 
 PY = sys.executable
 

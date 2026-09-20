@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 
 from evaluation.benchmark_runner import _split_videos  # noqa: E402
 from runtime.environment_factory import load_yaml  # noqa: E402
-from tools.stage5b_parallel_common import run_parallel  # noqa: E402
+from tooling_scripts.stage5b_parallel_common import run_parallel  # noqa: E402
 
 DQN_CHECKPOINT = "training/dqn_bdd_s5_120k_final.zip"
 PPO_CHECKPOINT = "training/ppo_bdd_s5_300k_final.zip"

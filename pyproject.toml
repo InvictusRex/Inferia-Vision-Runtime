@@ -28,6 +28,7 @@ packages = [
     "runtime",
     "evaluation",
     "model_management",
+    "tooling_scripts",
 ]
 
 [tool.ruff]
