@@ -1,0 +1,14 @@
+quality_backend: map
+w_quality: 2.0
+w_latency: 1.0
+w_compute: 0.3
+w_switch: 0.3
+target_count: 10.0
+max_latency_ms: 100.0
+min_fps: 15.0
+labels_path: null
+latency_source: edge_profile
+latency_jitter_ms: 0.0
+constraints: {}
+constraint_weights: {}
+map_iou_threshold: 0.5
