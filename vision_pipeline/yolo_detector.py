@@ -6,8 +6,8 @@ from dataclasses import dataclass
 import numpy as np
 from ultralytics import YOLO
 
-from ..model_management.runtime_config_space import RuntimeConfig
-from ..runtime.system_telemetry import Telemetry
+from model_management.runtime_config_space import RuntimeConfig
+from runtime.system_telemetry import Telemetry
 
 
 @dataclass

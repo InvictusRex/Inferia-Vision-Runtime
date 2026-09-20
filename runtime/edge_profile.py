@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..model_management.runtime_config_space import RuntimeConfig
+from model_management.runtime_config_space import RuntimeConfig
 from .latency_estimator import LatencyEstimator
 
 PRECISION_BYTES = {"fp32": 1.0, "fp16": 0.5, "int8": 0.25}

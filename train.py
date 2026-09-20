@@ -18,8 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from implementation.runtime.environment_factory import load_yaml  # noqa: E402
-from implementation.reinforcement_learning.train_runtime import train  # noqa: E402
+from runtime.environment_factory import load_yaml  # noqa: E402
+from reinforcement_learning.train_runtime import train  # noqa: E402
 
 
 def main():

@@ -18,21 +18,21 @@ import csv
 import multiprocessing as mp
 from pathlib import Path
 
-from implementation.evaluation.baseline_schedulers import (
+from evaluation.baseline_schedulers import (
     AlwaysConfig,
     ContextualBandit,
     RandomPolicy,
     RuleBasedPolicy,
     SB3Policy,
 )
-from implementation.evaluation.benchmark_runner import (
+from evaluation.benchmark_runner import (
     _csv_fieldnames,
     _row_with_breakdown,
     _write_stats_csv,
     compare_policies_stats,
     run_episode,
 )
-from implementation.runtime.environment_factory import build_env_from_configs, load_yaml
+from runtime.environment_factory import build_env_from_configs, load_yaml
 
 N_WORKERS = 5
 

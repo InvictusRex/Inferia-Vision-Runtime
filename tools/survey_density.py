@@ -10,8 +10,8 @@ import cv2
 import numpy as np
 import yaml
 
-from implementation.model_management.runtime_config_space import RuntimeConfig
-from implementation.vision_pipeline.yolo_detector import Detector
+from model_management.runtime_config_space import RuntimeConfig
+from vision_pipeline.yolo_detector import Detector
 
 
 def main():

@@ -8,7 +8,7 @@ from typing import Callable
 import numpy as np
 from scipy import stats as scipy_stats
 
-from ..reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
+from reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
 from .baseline_schedulers import Policy, default_baselines
 
 DENSITY_BINS = [(0.0, 8.0, "sparse"), (8.0, 16.0, "mid"), (16.0, float("inf"), "dense")]
@@ -438,7 +438,7 @@ def compare_policies_dataset(
 
 
 def _load_configs(env_path: str, variants_path: str, reward_path: str, hardware_path: str = None):
-    from ..runtime.environment_factory import build_env_from_configs, load_yaml
+    from runtime.environment_factory import build_env_from_configs, load_yaml
 
     env_cfg = load_yaml(env_path)
     variants_cfg = load_yaml(variants_path)
@@ -481,7 +481,7 @@ if __name__ == "__main__":
     )
 
     def builder_for(path: str = None):
-        from ..runtime.environment_factory import build_env_from_configs
+        from runtime.environment_factory import build_env_from_configs
 
         return build_env_from_configs(
             env_cfg, variants_cfg, reward_cfg, video_override=path, hardware_cfg=hardware_cfg

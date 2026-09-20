@@ -28,9 +28,9 @@ sys.path.insert(0, str(ROOT))
 
 from stable_baselines3 import DQN, PPO  # noqa: E402
 
-from implementation.evaluation.baseline_schedulers import AlwaysConfig, default_baselines, SB3Policy  # noqa: E402
-from implementation.evaluation.benchmark_runner import _split_videos, compare_policies_dataset  # noqa: E402
-from implementation.runtime.environment_factory import build_env_from_configs, load_yaml  # noqa: E402
+from evaluation.baseline_schedulers import AlwaysConfig, default_baselines, SB3Policy  # noqa: E402
+from evaluation.benchmark_runner import _split_videos, compare_policies_dataset  # noqa: E402
+from runtime.environment_factory import build_env_from_configs, load_yaml  # noqa: E402
 
 DQN_CHECKPOINT = "training/dqn_bdd_s5_120k_final.zip"
 PPO_CHECKPOINT = "training/ppo_bdd_s5_300k_final.zip"

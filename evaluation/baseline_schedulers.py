@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..model_management.runtime_config_space import RuntimeConfig
-from ..reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
+from model_management.runtime_config_space import RuntimeConfig
+from reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
 
 
 class Policy:

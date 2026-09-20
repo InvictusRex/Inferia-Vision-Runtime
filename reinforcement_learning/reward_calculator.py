@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..runtime.edge_profile import compute_constraint_violations
-from ..runtime.system_telemetry import Telemetry
-from ..vision_pipeline.yolo_detector import Detections
-from ..vision_pipeline.scene_analyzer import SceneFeatures
+from runtime.edge_profile import compute_constraint_violations
+from runtime.system_telemetry import Telemetry
+from vision_pipeline.yolo_detector import Detections
+from vision_pipeline.scene_analyzer import SceneFeatures
 
 
 @dataclass

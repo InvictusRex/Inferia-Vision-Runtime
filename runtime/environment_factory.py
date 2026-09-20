@@ -5,18 +5,18 @@ from pathlib import Path
 
 import yaml
 
-from ..model_management.runtime_config_space import ConfigSpace
-from ..model_management.model_variants import build_variants
-from ..runtime.edge_profile import EdgeProfile
-from ..runtime.latency_estimator import LatencyEstimator
-from ..runtime.system_telemetry import Telemetry
-from ..vision_pipeline.detrac_source import DetracFrameSource
-from ..vision_pipeline.video_frame_source import DatasetVideoSource, VideoFrameSource
-from ..vision_pipeline.yolo_detector import Detector
-from ..vision_pipeline.scene_analyzer import SceneAnalyzer
-from ..reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
-from ..reinforcement_learning.observation_features import FeatureBuilder
-from ..reinforcement_learning.reward_calculator import RewardConfig, build_reward
+from model_management.runtime_config_space import ConfigSpace
+from model_management.model_variants import build_variants
+from runtime.edge_profile import EdgeProfile
+from runtime.latency_estimator import LatencyEstimator
+from runtime.system_telemetry import Telemetry
+from vision_pipeline.detrac_source import DetracFrameSource
+from vision_pipeline.video_frame_source import DatasetVideoSource, VideoFrameSource
+from vision_pipeline.yolo_detector import Detector
+from vision_pipeline.scene_analyzer import SceneAnalyzer
+from reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
+from reinforcement_learning.observation_features import FeatureBuilder
+from reinforcement_learning.reward_calculator import RewardConfig, build_reward
 
 
 def load_yaml(path: str) -> dict:

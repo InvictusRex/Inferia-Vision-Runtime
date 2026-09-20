@@ -21,8 +21,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["ruff>=0.5", "black>=24"]
 
-[tool.setuptools.packages.find]
-where = ["implementation"]
+[tool.setuptools]
+packages = [
+    "vision_pipeline",
+    "reinforcement_learning",
+    "runtime",
+    "evaluation",
+    "model_management",
+]
 
 [tool.ruff]
 line-length = 100

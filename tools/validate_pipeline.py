@@ -26,27 +26,27 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from implementation.model_management.model_variants import build_variants  # noqa: E402
-from implementation.model_management.runtime_config_space import (  # noqa: E402
+from model_management.model_variants import build_variants  # noqa: E402
+from model_management.runtime_config_space import (  # noqa: E402
     ConfigSpace,
     RuntimeConfig,
 )
-from implementation.reinforcement_learning.reward_calculator import (  # noqa: E402
+from reinforcement_learning.reward_calculator import (  # noqa: E402
     ProxyReward,
     RewardConfig,
 )
-from implementation.runtime.edge_profile import (  # noqa: E402
+from runtime.edge_profile import (  # noqa: E402
     EdgeProfile,
     compute_constraint_violations,
 )
-from implementation.runtime.environment_factory import (  # noqa: E402
+from runtime.environment_factory import (  # noqa: E402
     build_env_from_configs,
     load_yaml,
 )
-from implementation.runtime.latency_estimator import LatencyEstimator  # noqa: E402
-from implementation.runtime.system_telemetry import GpuSnapshot, Telemetry  # noqa: E402
-from implementation.vision_pipeline.scene_analyzer import SceneFeatures  # noqa: E402
-from implementation.vision_pipeline.yolo_detector import Detections  # noqa: E402
+from runtime.latency_estimator import LatencyEstimator  # noqa: E402
+from runtime.system_telemetry import GpuSnapshot, Telemetry  # noqa: E402
+from vision_pipeline.scene_analyzer import SceneFeatures  # noqa: E402
+from vision_pipeline.yolo_detector import Detections  # noqa: E402
 
 FAILURES: list[str] = []
 

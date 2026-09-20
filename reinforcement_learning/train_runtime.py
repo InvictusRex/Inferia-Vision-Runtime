@@ -8,7 +8,7 @@ import numpy as np
 from stable_baselines3 import DQN, PPO
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
-from ..runtime.environment_factory import build_env_from_configs, load_yaml
+from runtime.environment_factory import build_env_from_configs, load_yaml
 
 
 class ProgressCallback(BaseCallback):

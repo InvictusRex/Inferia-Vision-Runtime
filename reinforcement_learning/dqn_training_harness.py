@@ -5,7 +5,7 @@ from pathlib import Path
 
 from stable_baselines3 import DQN
 
-from ..runtime.environment_factory import build_env_from_configs, load_yaml
+from runtime.environment_factory import build_env_from_configs, load_yaml
 
 
 def train(

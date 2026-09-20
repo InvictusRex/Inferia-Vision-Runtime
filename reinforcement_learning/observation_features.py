@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..runtime.system_telemetry import GpuSnapshot, Telemetry
-from ..vision_pipeline.scene_analyzer import SceneFeatures
+from runtime.system_telemetry import GpuSnapshot, Telemetry
+from vision_pipeline.scene_analyzer import SceneFeatures
 
 
 class FeatureBuilder:

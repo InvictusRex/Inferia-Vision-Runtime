@@ -15,8 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from implementation.evaluation.benchmark_runner import _split_videos  # noqa: E402
-from implementation.runtime.environment_factory import load_yaml  # noqa: E402
+from evaluation.benchmark_runner import _split_videos  # noqa: E402
+from runtime.environment_factory import load_yaml  # noqa: E402
 from tools.stage5b_parallel_common import run_parallel  # noqa: E402
 
 DQN_CHECKPOINT = "training/dqn_bdd_s5_120k_final.zip"

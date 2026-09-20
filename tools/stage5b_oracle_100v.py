@@ -25,9 +25,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from implementation.evaluation.baseline_schedulers import AlwaysConfig  # noqa: E402
-from implementation.evaluation.benchmark_runner import _split_videos, compare_policies_dataset  # noqa: E402
-from implementation.runtime.environment_factory import build_env_from_configs, load_yaml  # noqa: E402
+from evaluation.baseline_schedulers import AlwaysConfig  # noqa: E402
+from evaluation.benchmark_runner import _split_videos, compare_policies_dataset  # noqa: E402
+from runtime.environment_factory import build_env_from_configs, load_yaml  # noqa: E402
 
 SUBSAMPLE_SEED = 42
 SUBSAMPLE_SIZE = 100

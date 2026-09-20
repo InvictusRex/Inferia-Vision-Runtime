@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from implementation.runtime.environment_factory import load_yaml  # noqa: E402
+from runtime.environment_factory import load_yaml  # noqa: E402
 
 
 def default_output_name(dataset: str, model: str) -> str:
@@ -76,15 +76,15 @@ def main():
     )
     args = parser.parse_args()
 
-    from implementation.evaluation.benchmark_runner import (  # noqa: E402
+    from evaluation.benchmark_runner import (  # noqa: E402
         _split_videos,
         compare_policies_dataset,
     )
-    from implementation.evaluation.baseline_schedulers import (  # noqa: E402
+    from evaluation.baseline_schedulers import (  # noqa: E402
         SB3Policy,
         default_baselines,
     )
-    from implementation.runtime.environment_factory import (  # noqa: E402
+    from runtime.environment_factory import (  # noqa: E402
         build_env_from_configs,
         detrac_sequence_dirs,
     )
