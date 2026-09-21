@@ -28,10 +28,10 @@ from reinforcement_learning.train_runtime import train  # noqa: E402
 
 def main():
     parser = argparse.ArgumentParser(description="Train PPO on BDD-A + sweep the switch penalty")
-    parser.add_argument("--env", default="configs/env_bdd.yaml")
+    parser.add_argument("--env", default="configs/env/env_bdd.yaml")
     parser.add_argument("--variants", default="configs/variants.yaml")
-    parser.add_argument("--reward", default="configs/reward_bdd.yaml")
-    parser.add_argument("--training", default="configs/training_ppo_bdd.yaml")
+    parser.add_argument("--reward", default="configs/reward/reward_bdd.yaml")
+    parser.add_argument("--training", default="configs/training/training_ppo_bdd.yaml")
     parser.add_argument("--hardware", default="configs/hardware.yaml")
     parser.add_argument("--timesteps", type=int, default=None, help="override main run steps")
     parser.add_argument(
@@ -82,7 +82,7 @@ def main():
         if args.constraints == "off":
             base_reward_cfg["constraints"] = {}
         else:
-            base = load_yaml("configs/reward_constrained_bdd.yaml")
+            base = load_yaml("configs/reward/reward_constrained_bdd.yaml")
             base_reward_cfg["constraints"] = base.get("constraints", {})
             base_reward_cfg["constraint_weights"] = base.get("constraint_weights", {})
 

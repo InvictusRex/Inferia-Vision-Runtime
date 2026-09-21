@@ -36,9 +36,9 @@ def default_output_name(dataset: str, model: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate a trained IVR RL agent (offline)")
-    parser.add_argument("--env", default="configs/env_bdd.yaml")
+    parser.add_argument("--env", default="configs/env/env_bdd.yaml")
     parser.add_argument("--variants", default="configs/variants.yaml")
-    parser.add_argument("--reward", default="configs/reward_bdd.yaml")
+    parser.add_argument("--reward", default="configs/reward/reward_bdd.yaml")
     parser.add_argument("--hardware", default="configs/hardware.yaml", help="hardware profile yaml")
     parser.add_argument(
         "--dataset",
@@ -102,7 +102,7 @@ def main():
         if args.constraints == "off":
             reward_cfg["constraints"] = {}
         else:
-            base = load_yaml("configs/reward_constrained_bdd.yaml")
+            base = load_yaml("configs/reward/reward_constrained_bdd.yaml")
             reward_cfg["constraints"] = base.get("constraints", {})
             reward_cfg["constraint_weights"] = base.get("constraint_weights", {})
     hardware_cfg = load_yaml(args.hardware)

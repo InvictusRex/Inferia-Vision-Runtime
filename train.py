@@ -24,10 +24,10 @@ from reinforcement_learning.train_runtime import train  # noqa: E402
 
 def main():
     parser = argparse.ArgumentParser(description="Train the IVR RL agent (offline, no network)")
-    parser.add_argument("--env", default="configs/env_bdd.yaml")
+    parser.add_argument("--env", default="configs/env/env_bdd.yaml")
     parser.add_argument("--variants", default="configs/variants.yaml")
-    parser.add_argument("--reward", default="configs/reward_bdd.yaml")
-    parser.add_argument("--training", default="configs/training_bdd.yaml")
+    parser.add_argument("--reward", default="configs/reward/reward_bdd.yaml")
+    parser.add_argument("--training", default="configs/training/training_bdd.yaml")
     parser.add_argument("--hardware", default="configs/hardware.yaml", help="hardware profile yaml")
     parser.add_argument("--timesteps", type=int, default=None)
     parser.add_argument("--algorithm", default=None, choices=["dqn", "ppo"])
@@ -81,7 +81,7 @@ help="override dataset root (absolute or relative to repo root), e.g. "
         if args.constraints == "off":
             reward_cfg["constraints"] = {}
         else:
-            base = load_yaml("configs/reward_constrained_bdd.yaml")
+            base = load_yaml("configs/reward/reward_constrained_bdd.yaml")
             reward_cfg["constraints"] = base.get("constraints", {})
             reward_cfg["constraint_weights"] = base.get("constraint_weights", {})
 

@@ -8,7 +8,7 @@ from .latency_estimator import LatencyEstimator
 PRECISION_BYTES = {"fp32": 1.0, "fp16": 0.5, "int8": 0.25}
 PRECISION_FACTOR = {"fp32": 1.0, "fp16": 0.6, "int8": 0.35}
 
-# Maps a stress-test constraint key (configs/reward_constrained_bdd.yaml) to the
+# Maps a stress-test constraint key (configs/reward/reward_constrained_bdd.yaml) to the
 # EdgeSnapshot/GpuSnapshot metric it bounds. Shared by EdgeProfile.constraint_violations
 # and RewardCalculator so the threshold comparison exists in exactly one place.
 CONSTRAINT_METRIC_KEYS = {

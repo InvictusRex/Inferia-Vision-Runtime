@@ -213,10 +213,10 @@ def train(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the IVR RL agent (offline, no network)")
-    parser.add_argument("--env", default="configs/env_bdd.yaml")
+    parser.add_argument("--env", default="configs/env/env_bdd.yaml")
     parser.add_argument("--variants", default="configs/variants.yaml")
-    parser.add_argument("--reward", default="configs/reward_bdd.yaml")
-    parser.add_argument("--training", default="configs/training_bdd.yaml")
+    parser.add_argument("--reward", default="configs/reward/reward_bdd.yaml")
+    parser.add_argument("--training", default="configs/training/training_bdd.yaml")
     parser.add_argument("--hardware", default="configs/hardware.yaml", help="hardware profile yaml")
     parser.add_argument("--timesteps", type=int, default=None)
     parser.add_argument("--algorithm", default=None, choices=["dqn", "ppo"])

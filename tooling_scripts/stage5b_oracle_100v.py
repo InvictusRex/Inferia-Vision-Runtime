@@ -35,9 +35,9 @@ OUTPUT_NAME = "stage5_oracle_18action_100v.csv"
 
 
 def main() -> None:
-    env_cfg = load_yaml("configs/env_bdd.yaml")
+    env_cfg = load_yaml("configs/env/env_bdd.yaml")
     variants_cfg = load_yaml("configs/variants.yaml")
-    reward_cfg = load_yaml("configs/reward_bdd.yaml")
+    reward_cfg = load_yaml("configs/reward/reward_bdd.yaml")
     hardware_cfg = load_yaml("configs/hardware.yaml")
 
     env = build_env_from_configs(env_cfg, variants_cfg, reward_cfg, hardware_cfg=hardware_cfg)

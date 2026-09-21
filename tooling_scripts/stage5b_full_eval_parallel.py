@@ -38,7 +38,7 @@ SPECS = [
 
 
 def main() -> None:
-    env_cfg = load_yaml("configs/env_bdd.yaml")
+    env_cfg = load_yaml("configs/env/env_bdd.yaml")
     videos = _split_videos(env_cfg.get("dataset_dir", "../BDDA/BDDA"), "test")
     print(f"n videos: {len(videos)} (full test split)", flush=True)
     print(f"policies ({len(SPECS)}): {SPECS}", flush=True)

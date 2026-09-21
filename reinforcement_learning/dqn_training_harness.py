@@ -57,10 +57,10 @@ def train(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the IVR RL agent")
-    parser.add_argument("--env", default="configs/env.yaml")
+    parser.add_argument("--env", default="configs/env/env.yaml")
     parser.add_argument("--variants", default="configs/variants.yaml")
-    parser.add_argument("--reward", default="configs/reward.yaml")
-    parser.add_argument("--training", default="configs/training.yaml")
+    parser.add_argument("--reward", default="configs/reward/reward.yaml")
+    parser.add_argument("--training", default="configs/training/training.yaml")
     parser.add_argument("--timesteps", type=int, default=None)
     args = parser.parse_args()
     overrides = {"timesteps": args.timesteps} if args.timesteps is not None else None

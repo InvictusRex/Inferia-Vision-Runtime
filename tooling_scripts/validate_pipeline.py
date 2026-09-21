@@ -242,7 +242,7 @@ def check_switch_penalty(env_cfg, variants_cfg) -> None:
 
 
 def check_constraints_fire(edge: EdgeProfile, cs: ConfigSpace) -> None:
-    constrained_cfg = load_yaml("configs/reward_constrained_bdd.yaml")
+    constrained_cfg = load_yaml("configs/reward/reward_constrained_bdd.yaml")
     constraints = constrained_cfg["constraints"]
     violated = []
     print("    action table (model, res, precision -> violated constraints):")
@@ -430,9 +430,9 @@ def main() -> None:
     check_directional_power(edge)
     check_constraint_reward_delta()
 
-    env_cfg = load_yaml("configs/env_bdd.yaml")
+    env_cfg = load_yaml("configs/env/env_bdd.yaml")
     variants_cfg = load_yaml("configs/variants.yaml")
-    reward_cfg = load_yaml("configs/reward_bdd.yaml")
+    reward_cfg = load_yaml("configs/reward/reward_bdd.yaml")
 
     check_switch_penalty(env_cfg, variants_cfg)
     check_constraints_fire(edge, cs)

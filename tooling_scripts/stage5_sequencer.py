@@ -32,7 +32,7 @@ JOBS = [
         "checkpoint_path": "training/dqn_bdd_s5_120k_final.zip",
         "command": [
             PY, "train.py",
-            "--training", "configs/training_bdd.yaml",
+            "--training", "configs/training/training_bdd.yaml",
             "--algorithm", "dqn",
             "--timesteps", "120000",
             "--hardware", "configs/hardware.yaml",
@@ -46,7 +46,7 @@ JOBS = [
         "checkpoint_path": "training/ppo_bdd_s5_300k_final.zip",
         "command": [
             PY, "train.py",
-            "--training", "configs/training_ppo_bdd.yaml",
+            "--training", "configs/training/training_ppo_bdd.yaml",
             "--algorithm", "ppo",
             "--timesteps", "300000",
             "--hardware", "configs/hardware.yaml",

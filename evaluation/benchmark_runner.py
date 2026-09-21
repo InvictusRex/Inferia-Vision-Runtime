@@ -463,9 +463,9 @@ def _split_videos(dataset_dir: str, split: str) -> list[str]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run IVR baseline comparison (single or dataset)")
-    parser.add_argument("--env", default="configs/env_bdd.yaml")
+    parser.add_argument("--env", default="configs/env/env_bdd.yaml")
     parser.add_argument("--variants", default="configs/variants.yaml")
-    parser.add_argument("--reward", default="configs/reward_bdd.yaml")
+    parser.add_argument("--reward", default="configs/reward/reward_bdd.yaml")
     parser.add_argument("--hardware", default="configs/hardware.yaml", help="hardware profile yaml")
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=None)

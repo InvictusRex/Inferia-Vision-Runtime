@@ -27,7 +27,7 @@ OUTPUT_NAME = "stage5_oracle_18action_100v.csv"
 
 
 def main() -> None:
-    env_cfg = load_yaml("configs/env_bdd.yaml")
+    env_cfg = load_yaml("configs/env/env_bdd.yaml")
     variants_cfg = load_yaml("configs/variants.yaml")
 
     all_videos = _split_videos(env_cfg.get("dataset_dir", "../BDDA/BDDA"), "test")

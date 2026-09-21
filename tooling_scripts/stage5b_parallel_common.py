@@ -68,9 +68,9 @@ def _policy_name(spec: tuple) -> str:
 
 def _worker(args) -> tuple[str, list[dict]]:
     spec, videos = args
-    env_cfg = load_yaml("configs/env_bdd.yaml")
+    env_cfg = load_yaml("configs/env/env_bdd.yaml")
     variants_cfg = load_yaml("configs/variants.yaml")
-    reward_cfg = load_yaml("configs/reward_bdd.yaml")
+    reward_cfg = load_yaml("configs/reward/reward_bdd.yaml")
     hardware_cfg = load_yaml("configs/hardware.yaml")
 
     def builder_for(path=None):
