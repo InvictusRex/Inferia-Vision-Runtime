@@ -94,7 +94,7 @@ These decisions were confirmed with the project owner and are binding:
 | **Action space** | Flattened **discrete** combos: model × resolution × precision | DQN-friendly; env designed to extend to hierarchical later |
 | **Hardware emulation** | **Emulated edge profile** (`EdgeProfile`, Phase 2b): nominal Rock 5C values for VRAM / GPU util / power / temp / latency per config | Live 4060 NVML is **debug-only**, never in reward/obs — live device state collapses the policy to always-nano (Phase 1 lesson) |
 | **Constraint semantics** | Heavy **reward penalty** proportional to violation fraction (no action masking) | Keeps DQN/PPO stock; validated 2026-08-08 |
-| **Layout/tooling** | `implementation/` package, ruff + type hints, `pyproject.toml` | Minimal but clean |
+| **Layout/tooling** | Flat top-level packages (`vision_pipeline/`, `reinforcement_learning/`, `runtime/`, `evaluation/`, `model_management/`), ruff + type hints, `pyproject.toml` | Minimal but clean |
 | **Phase scope** | Full 4-phase roadmap planned; **implementation is YOLO-only until non-YOLO integration phase** | Model-agnostic interfaces kept throughout |
 
 ---
@@ -297,40 +297,55 @@ Goal: a better accuracy–latency–energy trade-off than any fixed pipeline.
 
 ---
 
-## 9. Proposed Repository Layout
+## 9. Repository Layout
+
+The five core packages live at the repository root (no wrapping package) so
+`pyproject.toml`'s declared package names match the actual importable paths,
+and imports are absolute (`from runtime.x import y`) rather than relative
+across package boundaries.
 
 ```
 pyproject.toml, README.md, .gitignore
-weights/            # yolo11n/s/m.pt (official, downloaded)
-videos/             # training/eval video files
-configs/            # yaml: model variants, config space, env, reward, training
-implementation/
-  model_management/
-    model_variants.py        # ModelVariant registry (repo yolo11n/s/m + gflops)
-    runtime_config_space.py  # flatten model×res×precision → discrete action index
-  runtime/
-    system_telemetry.py      # Phase1: infer fps/latency; Phase2: pynvml hooks
-    environment_factory.py   # wires configs → env (weights, detector, reward, obs)
-  vision_pipeline/
-    yolo_detector.py         # thin ultralytics wrapper → boxes+scores+latency
-    scene_analyzer.py        # motion, count/conf/box-size, brightness, entropy
-    video_frame_source.py    # video file ingest, frame iterator (camera-ready)
-  reinforcement_learning/
-    vision_runtime_env.py    # gymnasium.Env over the video stream
-    reward_calculator.py     # RewardCalculator: proxy | map | hybrid
-    observation_features.py  # observation vector builder
-    dqn_training_harness.py  # SB3 DQN (and PPO later) training CLI
-  evaluation/
-    baseline_schedulers.py   # Always-n/s/m, Random, Rule-based, Contextual bandit
-    benchmark_runner.py      # head-to-head comparison vs IVR → output/benchmark.csv
-training/           # model checkpoints
-runs/               # tensorboard / logs
-output/             # metrics
+weights/                    # yolo11n/s/m.pt (official, downloaded)
+videos/                     # training/eval video files
+configs/
+  env/                      # env.yaml, env_bdd.yaml, env_detrac.yaml
+  reward/                   # reward.yaml, reward_bdd.yaml, reward_constrained_bdd.yaml, reward_detrac.yaml
+  training/                 # training.yaml, training_bdd.yaml, training_ppo_bdd.yaml
+  hardware.yaml
+  variants.yaml
+model_management/
+  model_variants.py         # ModelVariant registry (repo yolo11n/s/m + gflops)
+  runtime_config_space.py   # flatten model×res×precision → discrete action index
+runtime/
+  system_telemetry.py       # infer fps/latency; pynvml hooks
+  environment_factory.py    # wires configs → env (weights, detector, reward, obs)
+  edge_profile.py           # emulated Rock 5C hardware profile + constraints
+  latency_estimator.py
+vision_pipeline/
+  yolo_detector.py          # thin ultralytics wrapper → boxes+scores+latency
+  scene_analyzer.py         # motion, count/conf/box-size, brightness, entropy
+  video_frame_source.py     # video file ingest, frame iterator (camera-ready)
+  detrac_source.py          # UA-DETRAC frame source + XML ground-truth parser
+reinforcement_learning/
+  vision_runtime_env.py     # gymnasium.Env over the video stream
+  reward_calculator.py      # RewardCalculator: proxy | map
+  observation_features.py   # observation vector builder
+  train_runtime.py          # unified DQN/PPO training CLI
+evaluation/
+  baseline_schedulers.py    # Always-n/s/m, Random, Rule-based, Contextual bandit
+  benchmark_runner.py       # head-to-head comparison vs IVR → output/benchmark.csv
+tooling_scripts/            # detached runner, stage sequencers, validation, surveys
+docs/
+  screenshots/              # training-runs/, review-slides/
+training/                   # model checkpoints (gitignored)
+runs/                       # tensorboard / logs (gitignored)
+output/                     # metrics (gitignored)
 ```
 
-CLI entrypoints: `python -m implementation.evaluation.benchmark_runner` (baselines
-comparison, `--model` to add a trained DQN) and
-`python -m implementation.reinforcement_learning.dqn_training_harness` (train).
+CLI entrypoints: `python -m evaluation.benchmark_runner` (baselines comparison,
+`--model` to add a trained DQN/PPO checkpoint) and the root launchers
+`python train.py` / `python eval.py` / `python sweep.py`.
 
 ---
 
@@ -383,7 +398,7 @@ comparison, `--model` to add a trained DQN) and
       GPU metrics) — built 2026-08-08, smoke-tested
 - [ ] NVML telemetry (debug/validation hook only, gated off by default)
 - [x] Constraint-aware rewards (hard constraints + priority weights) — built
-      2026-08-08 (`configs/reward_constrained_bdd.yaml`, `--constraints on|off`)
+      2026-08-08 (`configs/reward/reward_constrained_bdd.yaml`, `--constraints on|off`)
 - [ ] Switching-penalty tuning (`sweep.py --sweep-values`, results pending)
 
 ### Phase 3 — Edge Runtime
@@ -484,7 +499,7 @@ models integrate without changing the core runtime architecture.
 - **BDD-A training data** lives **outside the repo** as a sibling directory:
   `../BDDA/BDDA/{training,validation,test}/camera_videos/` (relative to the repo
   root). Only `camera_videos/` are used (gazemap/gps removed). Referenced via
-  `configs/env_bdd.yaml` `dataset_dir: ../BDDA/BDDA`.
+  `configs/env/env_bdd.yaml` `dataset_dir: ../BDDA/BDDA`.
 - **Root launchers:** `python train.py` (train) and `python eval.py` (evaluate a
   saved model). Both work from any directory (add repo root to `sys.path`) and
   expose the dataset dir/split straight from the CLI.

@@ -148,7 +148,7 @@ python sweep.py --constraints on             # train/sweep with hard constraints
 python sweep.py --sweep-values 0.1,0.3,0.5 --sweep-timesteps 60000
 ```
 
-- Step 1 trains `configs/training_ppo_bdd.yaml` (PPO, 300k, `training/ppo_bdd_final.zip`).
+- Step 1 trains `configs/training/training_ppo_bdd.yaml` (PPO, 300k, `training/ppo_bdd_final.zip`).
 - Step 2 retrains `{log_root}_ws{w}_final.zip` for each `--sweep-values` entry (default 0.1 and 0.5).
 - Each job prints the same live progress bar as `train.py`.
 
@@ -157,12 +157,12 @@ python sweep.py --sweep-values 0.1,0.3,0.5 --sweep-timesteps 60000
 The reward and observation read **nominal Rock 5C values** (never the 4060's
 live numbers — that would break VRAM/power feasibility and reintroduce thermal
 noise). `configs/hardware.yaml` defines the edge profile (6 TOPS, 2048 MB VRAM,
-5 W TDP, 30 fps target); `implementation/runtime/edge_profile.py` emulates
+5 W TDP, 30 fps target); `runtime/edge_profile.py` emulates
 VRAM/util/power/temp/latency per config.
 
 - Observation is now **14-dim** (dims 10–13 = emulated util/vram/temp/power).
   The old 10-dim Phase 2a checkpoints are **incompatible** — retrain DQN + PPO.
-- Constraints + weights live in `configs/reward_constrained_bdd.yaml`
+- Constraints + weights live in `configs/reward/reward_constrained_bdd.yaml`
   (`max_vram_mb 2048`, `max_power_w 5`, `max_gpu_temp_c 80`, `max_gpu_util 90`,
   `max_latency_ms 100`). Violations add a heavy `w*(1+fraction)` penalty.
 - Toggle with `--constraints on|off` and override the switch weight with
@@ -171,7 +171,7 @@ VRAM/util/power/temp/latency per config.
 ```powershell
 python train.py --constraints on --w-switch 0.5     # constrained DQN retrain
 python eval.py --constraints on                     # eval under the same constraints
-python eval.py --reward configs/reward_constrained_bdd.yaml
+python eval.py --reward configs/reward/reward_constrained_bdd.yaml
 ```
 
 > **Note:** all EdgeProfile numbers are placeholders pending Phase 3 real
