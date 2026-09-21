@@ -7,17 +7,17 @@ __pycache__/
 .ruff_cache/
 
 # Virtual environments
-.venv/
-venv/
-env/
+/.venv/
+/venv/
+/env/
 
 # Weights (re-downloadable)
 weights/*.pt
 
 # Runtime artifacts
-runs/
-output/
-training/
+/runs/
+/output/
+/training/
 *.log
 
 # Local project context (regenerated at milestones)
