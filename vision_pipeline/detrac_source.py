@@ -63,9 +63,11 @@ class DetracFrameSource(FrameSource):
         name = seq_dir.name
         if name not in self._annotations:
             xml_path = self.xml_dir / f"{name}.xml"
-            self._annotations[name] = (
-                load_detrac_annotations(str(xml_path)) if xml_path.exists() else {}
-            )
+            if not xml_path.exists():
+                # Never fall back to empty ground truth: an F1 reward against no boxes
+                # silently scores every detection as a false positive.
+                raise FileNotFoundError(f"missing UA-DETRAC annotations: {xml_path}")
+            self._annotations[name] = load_detrac_annotations(str(xml_path))
         return self._annotations[name]
 
     def _set_current(self, index: int) -> None:

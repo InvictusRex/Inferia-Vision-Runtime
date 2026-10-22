@@ -29,6 +29,13 @@ def detrac_xml_dir(dataset_dir: str, split: str) -> Path:
     return Path(dataset_dir) / folder / folder
 
 
+def detrac_split_of(dataset_dir: str, sequence_name: str) -> str:
+    for split in ("train", "test"):
+        if (detrac_xml_dir(dataset_dir, split) / f"{sequence_name}.xml").exists():
+            return split
+    raise FileNotFoundError(f"no UA-DETRAC annotation XML found for sequence {sequence_name}")
+
+
 def detrac_sequence_dirs(dataset_dir: str, split: str) -> list[str]:
     images_dir = Path(dataset_dir) / "DETRAC-Images" / "DETRAC-Images"
     xml_dir = detrac_xml_dir(dataset_dir, split)
@@ -105,10 +112,13 @@ def build_env_from_configs(
     if env_cfg.get("dataset_type") == "detrac":
         dataset_dir = env_cfg["dataset_dir"]
         split = str(env_cfg.get("dataset_split", "train"))
-        seq_dirs = (
-            [str(video_override)] if video_override is not None
-            else detrac_sequence_dirs(dataset_dir, split)
-        )
+        if video_override is not None:
+            # A single sequence carries its own split: test sequences are annotated only
+            # under the test XML folder, whatever split the env config was written for.
+            seq_dirs = [str(video_override)]
+            split = detrac_split_of(dataset_dir, Path(video_override).name)
+        else:
+            seq_dirs = detrac_sequence_dirs(dataset_dir, split)
         source = DetracFrameSource(
             seq_dirs, str(detrac_xml_dir(dataset_dir, split)), seed=int(env_cfg.get("seed", 0))
         )
