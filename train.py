@@ -32,6 +32,10 @@ def main():
     parser.add_argument("--timesteps", type=int, default=None)
     parser.add_argument("--algorithm", default=None, choices=["dqn", "ppo"])
     parser.add_argument(
+        "--seed", type=int, default=None,
+        help="override both the agent seed and the episode-sampling seed",
+    )
+    parser.add_argument(
         "--log-name", default=None, help="override the training config's log_name/checkpoint stem"
     )
     parser.add_argument("--log-every", type=int, default=2000)
@@ -67,8 +71,12 @@ help="override dataset root (absolute or relative to repo root), e.g. "
         overrides["algorithm"] = args.algorithm
     if args.log_name is not None:
         overrides["log_name"] = args.log_name
+    if args.seed is not None:
+        overrides["seed"] = args.seed
 
     env_cfg = load_yaml(args.env)
+    if args.seed is not None:
+        env_cfg["seed"] = args.seed
     if args.dataset_dir:
         env_cfg["dataset_dir"] = args.dataset_dir
     if args.dataset_split:

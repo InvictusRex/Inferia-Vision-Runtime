@@ -66,12 +66,21 @@ def _policy_name(spec: tuple) -> str:
     return spec[0]
 
 
+def default_configs() -> dict:
+    return {
+        "env": load_yaml("configs/env/env_bdd.yaml"),
+        "variants": load_yaml("configs/variants.yaml"),
+        "reward": load_yaml("configs/reward/reward_bdd.yaml"),
+        "hardware": load_yaml("configs/hardware.yaml"),
+    }
+
+
 def _worker(args) -> tuple[str, list[dict]]:
-    spec, videos = args
-    env_cfg = load_yaml("configs/env/env_bdd.yaml")
-    variants_cfg = load_yaml("configs/variants.yaml")
-    reward_cfg = load_yaml("configs/reward/reward_bdd.yaml")
-    hardware_cfg = load_yaml("configs/hardware.yaml")
+    spec, videos, configs = args
+    env_cfg = configs["env"]
+    variants_cfg = configs["variants"]
+    reward_cfg = configs["reward"]
+    hardware_cfg = configs["hardware"]
 
     def builder_for(path=None):
         return build_env_from_configs(
@@ -104,13 +113,16 @@ def run_parallel(
     output_filename: str,
     stats_reference: str | None = None,
     n_workers: int = N_WORKERS,
+    configs: dict | None = None,
 ) -> None:
-    variants_cfg = load_yaml("configs/variants.yaml")
+    """`configs` holds already-loaded env/variants/reward/hardware dicts (default: BDD-A)."""
+    configs = configs or default_configs()
+    variants_cfg = configs["variants"]
     model_names = sorted({m["name"] for m in variants_cfg["models"]})
     resolutions = sorted(variants_cfg["resolutions"])
     precisions = sorted(variants_cfg["precisions"])
 
-    tasks = [(spec, videos) for spec in specs]
+    tasks = [(spec, videos, configs) for spec in specs]
     print(f"dispatching {len(tasks)} policies across {n_workers} worker processes "
           f"over {len(videos)} videos each", flush=True)
 
