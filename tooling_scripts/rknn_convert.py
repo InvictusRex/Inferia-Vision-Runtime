@@ -6,7 +6,7 @@ becomes two RKNN models:
 - fp16: no quantization, the highest precision the NPU executes
 - int8: asymmetric quantization calibrated on the staged UA-DETRAC frames
 
-Both are exported with separate box and class-score outputs (see SPLIT_OUTPUTS).
+Both are exported with the raw per-scale head outputs (see SPLIT_OUTPUTS).
 
 The NPU has no fp32 path, so the runtime's fp32/fp16 action axis maps onto
 these two on-device precisions.
@@ -23,10 +23,15 @@ from pathlib import Path
 from rknn.api import RKNN
 
 TARGET_PLATFORM = "rk3588"
-# The YOLO11 head concatenates pixel-scale boxes (0..imgsz) with 0..1 class scores into one
-# tensor. Quantized together they share one int8 scale and every score rounds to zero, so
-# the graph is cut just before that concat and the two halves are joined on the CPU.
-SPLIT_OUTPUTS = ["/model.23/Mul_2_output_0", "/model.23/Sigmoid_output_0"]
+# The graph is cut where the YOLO11 head's per-scale convolutions end: box-distribution
+# logits (64 ch) and class logits (80 ch) for strides 8/16/32. Quantizing the decoded head
+# instead puts pixel-scale boxes, DFL softmax and 0..1 scores under shared int8 scales,
+# which destroys localization; decoding these six tensors on the CPU keeps int8 usable.
+SPLIT_OUTPUTS = [
+    f"/model.23/{branch}.{i}/{branch}.{i}.2/Conv_output_0"
+    for i in range(3)
+    for branch in ("cv2", "cv3")
+]
 
 
 def convert(onnx_path: Path, out_path: Path, quantize: bool, dataset_txt: Path) -> None:

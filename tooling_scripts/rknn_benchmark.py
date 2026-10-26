@@ -35,6 +35,7 @@ CONF_THRESHOLD = 0.25
 NMS_IOU = 0.7
 MAX_DET = 300
 PAD_VALUE = 114
+DFL_BINS = 16
 
 CORE_MASKS = {1: RKNNLite.NPU_CORE_0, 3: RKNNLite.NPU_CORE_0_1_2}
 NPU_LOAD_PATH = Path("/sys/kernel/debug/rknpu/load")
@@ -92,8 +93,33 @@ def letterbox(frame: np.ndarray, size: int) -> tuple[np.ndarray, float, float, f
 
 
 def infer(lite: RKNNLite, inp: np.ndarray) -> np.ndarray:
-    """Run the model and rejoin its box and class-score outputs into the YOLO head layout."""
-    return np.concatenate(lite.inference(inputs=[inp]), axis=1)
+    """Run the model and decode its raw per-scale head outputs on the CPU.
+
+    Returns the YOLO head layout (1, 4 + n_classes, K) -- cx, cy, w, h in input pixels,
+    then class probabilities -- for the K anchors whose best score clears the threshold.
+    """
+    outs = lite.inference(inputs=[inp])
+    size = inp.shape[1]
+    boxes = {o.shape[2]: o for o in outs if o.shape[1] == 4 * DFL_BINS}
+    logits = {o.shape[2]: o for o in outs if o.shape[1] != 4 * DFL_BINS}
+    decoded = []
+    for h in sorted(boxes, reverse=True):
+        stride = size / h
+        cls = 1.0 / (1.0 + np.exp(-logits[h][0].reshape(logits[h].shape[1], -1)))
+        keep = np.flatnonzero(cls.max(0) > CONF_THRESHOLD)
+        if keep.size == 0:
+            continue
+        dist = boxes[h][0].reshape(4, DFL_BINS, -1)[:, :, keep]
+        dist = np.exp(dist - dist.max(1, keepdims=True))
+        dist = (dist / dist.sum(1, keepdims=True) * np.arange(DFL_BINS)[None, :, None]).sum(1)
+        ax, ay = keep % h + 0.5, keep // h + 0.5
+        x1, y1 = (ax - dist[0]) * stride, (ay - dist[1]) * stride
+        x2, y2 = (ax + dist[2]) * stride, (ay + dist[3]) * stride
+        xywh = np.stack([(x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1])
+        decoded.append(np.concatenate([xywh, cls[:, keep]]))
+    if not decoded:
+        return np.zeros((1, 4 + len(next(iter(logits.values()))[0]), 0), dtype=np.float32)
+    return np.concatenate(decoded, axis=1)[None].astype(np.float32)
 
 
 def postprocess(out: np.ndarray, scale: float, left: float, top: float) -> np.ndarray:
