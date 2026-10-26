@@ -107,6 +107,9 @@ class HardwareProfile:
     physical: PhysicalSpec = field(default_factory=PhysicalSpec)
     simulated: SimulatedParams = field(default_factory=SimulatedParams)
     policy: PolicyBudget = field(default_factory=PolicyBudget)
+    # Real ROCK 5C benchmark values keyed "<model>_<resolution>_<precision>" (the action's
+    # labels). Any metric present here replaces the simulated estimate for that config.
+    measured: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 class EdgeProfile:
@@ -143,6 +146,7 @@ class EdgeProfile:
         phys_cfg = hw_cfg.get("physical", {}) or {}
         sim_cfg = hw_cfg.get("simulated", {}) or {}
         pol_cfg = hw_cfg.get("policy", {}) or {}
+        measured_cfg = hw_cfg.get("measured", {}) or {}
         profile = HardwareProfile(
             name=str(hw_cfg.get("name", "rock_5c_rk3588s2")),
             physical=PhysicalSpec(
@@ -172,6 +176,10 @@ class EdgeProfile:
                 inference_memory_budget_mb=float(pol_cfg.get("inference_memory_budget_mb", 512.0)),
                 target_fps=float(pol_cfg.get("target_fps", 30.0)),
             ),
+            measured={
+                key: {metric: float(v) for metric, v in values.items()}
+                for key, values in (measured_cfg.get("configs", {}) or {}).items()
+            },
         )
         gflops = {name: variant.gflops for name, variant in variants.items()}
         weights_mb = {name: variant.edge_weights_mb for name, variant in variants.items()}
@@ -200,8 +208,9 @@ class EdgeProfile:
         res_scale = (res / 640.0) ** 2
         prec_factor = float(PRECISION_FACTOR.get(precision, 1.0))
         prec_bytes = float(PRECISION_BYTES.get(precision, 1.0))
+        measured = self.profile.measured.get(f"{model}_{res}_{precision}", {})
 
-        latency_ms = self.latency.latency_ms(model, res, precision)
+        latency_ms = measured.get("latency_ms", self.latency.latency_ms(model, res, precision))
         if sim.thermal_throttle_enabled and self._temp > sim.thermal_throttle_temp_c:
             latency_ms *= sim.thermal_throttle_latency_factor
 
@@ -211,7 +220,7 @@ class EdgeProfile:
         # never against `physical.system_memory_mb` (8192 MB is context, not a budget).
         base_weights = self.model_weights_mb.get(model, 0.0) * prec_bytes
         activation = sim.activation_scale_mb * res_scale
-        mem_used_mb = base_weights + activation
+        mem_used_mb = measured.get("mem_used_mb", base_weights + activation)
 
         # NPU compute-capacity pressure: per-second compute demand vs. peak NPU
         # capacity. Not clipped here -- an action whose demand exceeds capacity
@@ -220,10 +229,13 @@ class EdgeProfile:
         gflops = self.model_gflops.get(model, 0.0)
         demand_gflops_per_s = gflops * res_scale * prec_factor * pol.target_fps
         capacity_gflops_per_s = phys.npu_tops_int8 * 1000.0 * sim.npu_efficiency
-        npu_util_pct = (
-            100.0 * demand_gflops_per_s / max(capacity_gflops_per_s, 1e-9)
-            if capacity_gflops_per_s
-            else 0.0
+        npu_util_pct = measured.get(
+            "npu_util_pct",
+            (
+                100.0 * demand_gflops_per_s / max(capacity_gflops_per_s, 1e-9)
+                if capacity_gflops_per_s
+                else 0.0
+            ),
         )
 
         # Power: compute term + memory-bandwidth term, so power is not a
@@ -235,7 +247,7 @@ class EdgeProfile:
         load01 = compute_share * npu_load01 + sim.mem_bandwidth_power_share * mem_load01
         power_w = sim.power_idle_w + (sim.power_envelope_w - sim.power_idle_w) * load01
 
-        target_temp = sim.ambient_temp_c + sim.temp_rise_c * load01
+        target_temp = measured.get("temp_c", sim.ambient_temp_c + sim.temp_rise_c * load01)
         alpha = sim.temp_ewma_alpha
         self._temp = self._temp * (1.0 - alpha) + target_temp * alpha
 
