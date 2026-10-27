@@ -36,7 +36,7 @@ The hardware profile is worth calling out on its own, because it is the piece th
 
 ## The state and action spaces
 
-The agent's observation is a fourteen dimensional vector, normalised to the zero to one range, updated every frame before the detector even runs on that frame. The first ten dimensions come from the scene analyzer and are cheap by design: motion magnitude between consecutive frames, the object count from the previous frame, mean detection confidence, mean bounding box area, image brightness, image entropy, a temporal consistency score computed from box overlap across frames, current measured frames per second, the latency of the last inference call and the index of the action taken last time. The remaining four dimensions come from the simulated hardware profile for whatever configuration is currently active: NPU utilisation, memory used against the inference budget, temperature and power draw. The idea is that the agent should be able to answer two separate questions from its observation alone, how complex is the scene right now, and how much room does the hardware currently have to spend.
+The agent's observation is a fourteen dimensional vector, normalised to the zero to one range, updated every frame before the detector even runs on that frame. The first ten dimensions come from the scene analyzer and are cheap by design: motion magnitude between consecutive frames, the object count from the previous frame, mean detection confidence, mean bounding box area, image brightness, image entropy, a temporal consistency score computed from box overlap across frames, current measured frames per second, the latency of the last inference call and the index of the action taken last time. The remaining four dimensions come from the simulated hardware profile for whatever configuration is currently active: NPU utilisation, memory used against the inference budget, temperature and power draw. The idea is that the agent should be able to answer two separate questions from its observation alone, how complex is the scene right now, and how much room does the hardware currently have to spend. In the time varying deadline experiment described further down, five more dimensions are appended, one flag per deadline level that is set when the current latency deadline is at least that level, giving nineteen dimensions.
 
 | Dimension | Signal | Source |
 |---|---|---|
@@ -95,6 +95,8 @@ The switching penalty exists because a policy that flickers between a cheap and 
 The quality term is the part of this project that changed the most, and it is worth explaining honestly why. The first dataset used for training was BDD-A, a large set of real dashcam driving footage. BDD-A is genuinely useful footage but it was collected for a driver attention study, which means it comes with gaze heatmaps rather than object detection labels. There is no ground truth to compare a detector's output against. Early training used a proxy for quality instead, mean detection confidence multiplied by object count relative to a target count, on the reasoning that a detector which is confident and finds a reasonable number of objects is probably doing well. That proxy is a guess, not a measurement, and it eventually became the ceiling on what the whole system could learn, because a policy can only be as good as the signal it is trained against.
 
 UA-DETRAC is a different kind of dataset: one hundred sequences of real traffic camera footage with every vehicle in every frame hand annotated with a bounding box. Once ground truth boxes exist, quality can be computed properly rather than guessed at. IVR's real reward backend matches each predicted box against the closest ground truth box by intersection over union at a threshold of 0.5, and from that greedy matching computes precision, recall and their harmonic mean, the F1 score, per frame. This is a deliberate simplification relative to a full COCO style mean average precision protocol (one IoU threshold rather than several, no confidence sweep, class agnostic matching) chosen because it is fast enough to run inside the training loop on every single step, but it is a real measurement against real labels, which the proxy never was.
+
+That simplification turned out to matter more than expected. UA-DETRAC marks parts of every scene as ignored regions, parked cars and far away traffic that the annotators deliberately left unlabelled, and only annotates vehicles. Scored without those rules, a stronger detector is punished for every real but unlabelled car and every pedestrian it finds, so on the test split YOLO11m at 960 pixels scored an F1 of 0.558 against 0.653 for nano at 480, the opposite of reality. With the benchmark's own rules applied (only car, bus and truck detections count, and detections centred in an ignored region are dropped before matching, `vehicle_classes` and `mask_ignored_regions` in the reward config) the order flips to what one would expect: nano at 480 scores 0.768, small at 640 0.853 and medium at 960 0.865. The deadline experiment below uses this official scoring; the earlier results in this README predate it and use the simplified version.
 
 ```mermaid
 sequenceDiagram
@@ -179,11 +181,41 @@ The first int8 conversion lost between 0.12 and 0.36 detection F1, because quant
 
 ![Measured latency against on-device F1](docs/screenshots/review-slides/chart_board_frontier.png)
 
-The measured numbers are written into `configs/hardware_measured.yaml`, which is `configs/hardware.yaml` with its `measured:` section filled in; the edge profile uses any measured value in place of its simulated estimate, and `--hardware configs/hardware_measured.yaml` trains and evaluates against the real board. Finally, `tooling_scripts/rknn_live_demo.py` closes the loop on the device itself: a trained policy reads the same fourteen dimensional observation from the repository's own scene analyzer and picks a configuration every frame, and the NPU runs it, switching models live. The whole loop, scene analysis, NPU inference and the policy decision, runs at about 28 frames per second.
+The measured numbers are written into `configs/hardware_measured.yaml`, which is `configs/hardware.yaml` with its `measured:` section filled in; the edge profile uses any measured value in place of its simulated estimate, and `--hardware configs/hardware_measured.yaml` trains and evaluates against the real board. Finally, `tooling_scripts/rknn_live_demo.py` closes the loop on the device itself: a trained policy reads the same fourteen dimensional observation from the repository's own scene analyzer and picks a configuration every frame, and the NPU runs it, switching models live. The whole loop, scene analysis, NPU inference and the policy decision, runs at 43 to 50 frames per second over a full 1180 frame held out video.
 
 Both algorithms were then retrained from scratch against the measured profile, three seeds each, and evaluated on the same forty test sequences with the board's latency in the reward. The conclusion carries over from simulation and becomes sharper. All three PPO seeds converge exactly onto nano at 480 pixels in int8, which is also the best of the eighteen fixed configurations at 223.3, and DQN lands at 220.4 ± 3.8. Real latency punishes slow choices much harder than the simulated profile did, so the contextual bandit falls to 151.9 and random to -128.7, and every trained seed beats the bandit with paired t tests around p = 1e-19. Picking the best fixed configuration per video now adds only 0.8 percent.
 
 ![Every policy and all eighteen fixed configurations with measured board latency](docs/screenshots/review-slides/chart_final_board.png)
+
+## When the budget changes: where adaptation wins
+
+The two comparisons above share one assumption that real deployments rarely keep: the latency budget never changes. In practice the time a detector may spend per frame moves around, because the camera's frame rate is switched, another process takes the NPU, the board heats up, or a downstream controller needs answers faster for a while. A fixed configuration cannot follow that. Whatever it is, it is either fast enough for the tightest budget and wastes accuracy whenever there is time to spare, or accurate and late whenever the budget tightens.
+
+The deadline experiment makes that concrete. Every frame now has a latency deadline drawn from 20, 30, 50, 100 and 250 ms, held for a random 50 to 150 frames (two to six seconds of video) and then redrawn. The levels sit between the latencies measured on the ROCK 5C, so each one unlocks a more accurate configuration: nano at 480 in int8 (16.7 ms), small at 480 (24.4 ms), small at 640 (42.8 ms), small at 960 (94.1 ms) and medium at 960 (199.6 ms), all int8. The agent sees the deadline that applies to the next frame as five flags, one per level, set when the deadline is at least that level. The reward keeps the quality term, now with the official UA-DETRAC scoring, drops the continuous latency and compute penalties, and instead charges 2.0 for every frame whose measured latency exceeds its deadline, which outweighs any accuracy a late frame could buy. Everything else, the forty test sequences, the measured board latency and the 0.3 switching penalty, is unchanged, and every policy evaluated on a video sees the same deadline schedule.
+
+Two baselines that are not learned are included to keep the comparison honest. The lookup table is what an engineer would write by hand after profiling: for the current deadline, run the most accurate configuration whose measured latency fits, ranked by each configuration's F1 on the training split. The slowest fit variant needs no accuracy table and simply runs the slowest configuration that fits, on the theory that slower means more accurate.
+
+![Accuracy against deadline misses for every policy](docs/screenshots/review-slides/chart_deadline_tradeoff.png)
+
+| Policy | Mean reward | Detection F1 | Frames late | Note |
+|---|---|---|---|---|
+| Deadline lookup table | 333.9 | 0.826 | 0% | hand built from the board profile and a training split accuracy table |
+| Deadline lookup, slowest fit | 332.7 | 0.824 | 0% | hand built from the board profile only |
+| IVR DQN (3 seeds) | 326.8 ± 3.2 | 0.80 to 0.82 | 0% | seeds score 325.0, 325.0 and 330.5 |
+| Always nano, 480, int8 | 315.8 | 0.768 | 0% | best of the 18 fixed configurations |
+| IVR PPO (3 seeds) | 315.9 ± 0.2 | 0.768 | 0% | converges onto nano 480 int8 |
+| Contextual bandit | 240.5 | 0.796 | 12% | |
+| Always small, 480, int8 | 213.5 | 0.830 | 22% | |
+| Always small, 640, int8 | 116.7 | 0.851 | 40% | |
+| Always medium, 960, int8 | -86.1 | 0.863 | 77% | most accurate configuration |
+
+![Mean reward per test sequence under the time varying deadline](docs/screenshots/review-slides/chart_deadline_reward.png)
+
+Every fixed configuration lands on one side of the trade off. The ones that are never late are the least accurate, and every configuration more accurate than nano at 480 misses between a fifth and nearly all of its deadlines. DQN is the only learned policy that gets both: all three seeds meet every deadline on all forty test sequences while scoring 0.80 to 0.82 F1 against 0.768, and each seed beats the best fixed configuration by 9 to 15 reward per sequence, winning on 28 to 32 of the 40 sequences with Wilcoxon p values of at most 8e-5. The best seed runs nano on 29 percent of frames, small on 54 percent and medium on 17 percent, stepping up and down as the deadline moves. DQN still trails the hand built lookup table by 1 to 3 percent. The table is a strong baseline, since it is built from the exact profile the deadline levels were chosen from plus an offline accuracy measurement of every configuration, while DQN reaches nearly the same behaviour from reward alone, without being told which configuration is fast or accurate.
+
+Getting there took two corrections, both worth recording. The first version gave the agent the deadline as a single log scaled number and both algorithms settled on nano everywhere. Probing the trained Q network showed why: its preference changed smoothly with the deadline instead of stepping at each level, so the penalty for running small at 20 ms leaked into the 30 ms level where small fits. Replacing the number with one flag per level, and shortening the discount factor from 0.99 to 0.95 so that the small per frame accuracy gaps are not drowned out by the long horizon value, produced the stepped behaviour above. PPO, with the same changes, still converges onto nano at 480 int8 on every seed: early in training its sampled larger configurations miss deadlines often, their probability falls quickly, and an on policy method that rarely samples them again never learns that they pay off when the budget is loose. DQN's replay buffer keeps learning from those early exploratory frames.
+
+The same policy runs on the board. `rknn_live_demo.py` gives the deadline to the policy every frame, from the keyboard or from the same random schedule as training, and opens a live window with the detections, the configuration currently running on the NPU, its measured latency against the deadline and a scrolling timeline of both, so the switches are visible as they happen. Over 400 frames of a crowded, rainy held out sequence with the clocks pinned, the best DQN seed met 97 percent of its deadlines on the real NPU, measured end to end rather than taken from the profile, at a closed loop rate of 33 frames per second, running nano, small and medium as the deadline moved. The few late frames were at the tightest deadline, where nano's 17.5 ms median sits within jitter of 20 ms.
 
 ## Repository layout
 
@@ -205,7 +237,7 @@ vision_pipeline/
 reinforcement_learning/
   vision_runtime_env.py     the gymnasium.Env implementing the loop described above
   reward_calculator.py      ProxyReward and MapReward (the real IoU-F1 backend)
-  observation_features.py   builds the 14-dim observation vector
+  observation_features.py   builds the 14-dim observation vector, plus the deadline flags when enabled
   train_runtime.py          unified DQN / PPO training entrypoint
 runtime/
   environment_factory.py  wires yaml configs into a fully constructed environment
@@ -213,7 +245,7 @@ runtime/
   latency_estimator.py    nominal per-config latency model
   system_telemetry.py     rolling latency / fps / gpu-snapshot bookkeeping
 evaluation/
-  baseline_schedulers.py  the fixed, random, rule based and bandit baselines
+  baseline_schedulers.py  the fixed, random, rule based, bandit and deadline lookup baselines
   benchmark_runner.py     runs every policy over a dataset, computes paired statistics
 model_management/
   model_variants.py         model pool registry
@@ -224,7 +256,7 @@ tooling_scripts/
   rknn_convert.py               fp16 and int8 RKNN conversion (runs on the board)
   rknn_benchmark.py             on-device latency, NPU load and detection dumps (runs on the board)
   rknn_measured_profile.py      scores board detections and writes hardware_measured.yaml
-  rknn_live_demo.py             closed-loop policy + NPU demo (runs on the board)
+  rknn_live_demo.py             closed-loop policy + NPU demo with a live window and keyboard deadline (runs on the board)
   make_review_charts.py         renders the charts in this README
   ...                           detached runner, experiment sequencers, offline validation suite
 docs/               design notes and the screenshots referenced in this README
@@ -245,6 +277,20 @@ Adding `--hardware configs/hardware_measured.yaml` to either trains or evaluates
 
 The board side runs from a copy of `tooling_scripts/` on the ROCK 5C: `rknn_export_onnx.py` on the host stages the ONNX models and frames, then `rknn_convert.py`, `rknn_benchmark.py --mode latency` and `--mode detect` run on the board, and `rknn_measured_profile.py` back on the host turns the results into `configs/hardware_measured.yaml`.
 
+The time varying deadline experiment swaps in its own environment, reward and training configs, and the evaluation adds the two lookup schedulers:
+
+```
+python train.py --env configs/env/env_detrac_deadline.yaml --reward configs/reward/reward_detrac_deadline.yaml --training configs/training/training_dqn_deadline.yaml --hardware configs/hardware_measured.yaml --algorithm dqn --seed 0 --log-name dqn_detrac_deadline_s0
+
+python tooling_scripts/detrac_full_eval_parallel.py --env configs/env/env_detrac_deadline.yaml --reward configs/reward/reward_detrac_deadline.yaml --hardware configs/hardware_measured.yaml --fixed all --baselines --deadline-lookup output/deadline_lookup_accuracy.yaml --model ivr_dqn_deadline_s0=training/dqn_detrac_deadline_s0_final.zip --output test_detrac_deadline_eval.csv
+```
+
+The lookup table's accuracy file holds the official scoring F1 of each model and resolution on the training split. On the board, the live demo opens a full screen window on the desktop, so it can be shown over VNC, and the deadline is changed from the keyboard while it runs (1 to 5 pick 20, 30, 50, 100 or 250 ms, A replays a random schedule, N moves to the next video, P pauses, Q quits). Pin the clocks first, as for the benchmarks, since a reboot resets them:
+
+```
+python rknn_live_demo.py --repo ~/ivr/repo --bundle ~/ivr/bundle --policy ~/ivr/policies/dqn_detrac_deadline_s2_final.zip --sequence MVI_40864 MVI_40742 --show --fullscreen --loop
+```
+
 ## Honest state of things right now
 
-The pipeline is now validated end to end, from training on the host to a policy switching models live on the real NPU, and the detection quality a policy is trained against matches what the board actually delivers. On UA-DETRAC the trained policies beat every scheduler that does not search the configuration space and match the best fixed configuration, but they do not beat it, because this dataset offers almost no room for adaptation: nano is both the cheapest and among the most accurate models on fixed traffic cameras. The next step that would actually test the core idea is footage where scene difficulty changes which model is best, small or distant objects, night scenes or aerial views, so that paying for a bigger model is sometimes worth it. Power remains simulated until the board can be measured with an external USB-C meter.
+The pipeline is now validated end to end, from training on the host to a policy switching models live on the real NPU, and the detection quality a policy is trained against matches what the board actually delivers. Under a fixed latency budget the trained policies match the best fixed configuration but do not beat it, because on fixed traffic cameras the scene alone rarely changes which configuration is best. Under a latency budget that changes over time, the situation the runtime was designed for, DQN beats every one of the eighteen fixed configurations and every non learning scheduler while meeting every deadline, and comes within 1 to 3 percent of a lookup table hand built from the board profile. PPO does not learn to adapt in that setting and settles on the safe fixed configuration. Footage where scene difficulty itself changes which model is best, small or distant objects, night scenes or aerial views, would test the scene side of the observation the way the deadline experiment tests the hardware side. Power remains simulated until the board can be measured with an external USB-C meter.

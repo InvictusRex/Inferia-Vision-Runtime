@@ -412,14 +412,28 @@ CLI entrypoints: `python -m evaluation.benchmark_runner` (baselines comparison,
 - [x] FP16 / INT8 precision variants (the NPU's fp16 and int8 back the fp32/fp16 actions)
 - [x] Real hardware benchmarking: latency, NPU load and thermal measured on the board and
       written to `configs/hardware_measured.yaml`; energy still simulated (no power sensor)
-- [x] Closed-loop policy + NPU demo on the board (`tooling_scripts/rknn_live_demo.py`)
+- [x] Closed-loop policy + NPU demo on the board (`tooling_scripts/rknn_live_demo.py`), with a
+      live window (viewable over VNC) and the latency deadline set from the keyboard
+- [x] Official UA-DETRAC scoring in the reward (vehicle classes only, ignored regions masked;
+      `vehicle_classes`, `mask_ignored_regions`). Without it larger models scored lower
+      (m960 0.558 vs n480 0.653 F1); with it the order is n480 0.768 < s640 0.853 < m960 0.865
+- [x] Time-varying latency deadline (2026-10-28): deadline drawn from 20/30/50/100/250 ms,
+      redrawn every 50-150 frames, observed as five threshold flags (obs 14 -> 19 dims),
+      2.0 penalty per late frame (`configs/*/*_deadline.yaml`). On the 40 test sequences with
+      measured board latency, DQN (3 seeds, 325.0 / 325.0 / 330.5) beats all 18 fixed configs
+      (best: n480 int8, 315.8, p <= 8e-5) with 0% late frames and is 1-3% below a hand-built
+      deadline lookup table (333.9). PPO converges onto n480 int8 (315.9). On the board the
+      DQN policy met 97% of deadlines end to end at 33 FPS
 - [ ] Constraint solver: min FPS / max latency / max power / max memory / thermal
 
 ### Phase 4 — Research
 - [ ] Multiple datasets, generalization experiments
 - [ ] Ablation studies
 - [ ] Pareto frontier analysis
-- [x] Comparison vs non-RL schedulers (random, rule based, contextual bandit, all 18 fixed)
+- [x] Comparison vs non-RL schedulers (random, rule based, contextual bandit, all 18 fixed,
+      deadline lookup tables)
+- [x] Ablation of the deadline observation: a single log-scaled deadline (gamma 0.99 and 0.9)
+      left both algorithms on n480 (315-321); per-level flags with gamma 0.95 gave the result above
 - [ ] Paper preparation
 - [ ] Non-YOLO detector integration (RT-DETR, DINO, SAM) via the same interface
 

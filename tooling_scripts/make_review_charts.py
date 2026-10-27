@@ -290,6 +290,47 @@ def chart_frontier(profile: list[dict], out: Path) -> None:
     plt.close(fig)
 
 
+def chart_deadline(eval_csvs: list[Path], out: Path) -> None:
+    """Accuracy against deadline-miss rate, frame-weighted over the test sequences."""
+    totals: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+    for path in eval_csvs:
+        with open(path, newline="", encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                t, steps = totals[row["policy"]], float(row["steps"])
+                t[0] += float(row["mean_quality"]) * steps
+                t[1] += float(row["deadline_misses"])
+                t[2] += steps
+    points = {name: (100.0 * miss / n, f1 / n) for name, (f1, miss, n) in totals.items()}
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    for name, (miss, f1) in points.items():
+        if name.startswith("always_"):
+            _, model, res, prec = name.split("_")
+            board = "int8" if prec == "fp16" else "fp16"
+            ax.scatter(miss, f1, s=70, color=CONTEXT, edgecolor=SURFACE, linewidth=1.5, zorder=2)
+            if prec == "fp16":
+                ax.annotate(f"{model[6:]}{res} {board}", (miss, f1), xytext=(6, -4),
+                            textcoords="offset points", fontsize=9, color=INK_MUTED)
+        elif name.startswith("deadline_lookup"):
+            ax.scatter(miss, f1, s=110, marker="D", color=CONTEXT_STRONG, edgecolor=SURFACE,
+                       linewidth=1.5, zorder=3)
+    for algo, color in (("dqn", BLUE), ("ppo", ORANGE)):
+        seeds = [p for n, p in points.items() if n.startswith(f"ivr_{algo}")]
+        if seeds:
+            ax.scatter(*zip(*seeds), s=120, color=color, edgecolor=SURFACE, linewidth=1.5,
+                       zorder=4, label=f"IVR-{algo.upper()} ({len(seeds)} seeds)")
+    ax.scatter([], [], s=110, marker="D", color=CONTEXT_STRONG, label="hand-built deadline lookup")
+    ax.scatter([], [], s=70, color=CONTEXT, label="fixed config (board precision)")
+    ax.set_xlabel("Frames that missed the latency deadline (%)")
+    ax.set_ylabel("Detection F1, official UA-DETRAC scoring")
+    ax.set_xlim(-4, 104)
+    ax.legend(loc="lower right")
+    ax.set_title("Deadline changes every 2-6 s: only adaptive policies are both accurate and on time")
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -323,6 +364,23 @@ def main() -> None:
             board_eval,
             OUT_DIR / "chart_final_board.png",
             "UA-DETRAC, all 40 test sequences, measured ROCK 5C latency",
+        )
+    deadline_eval = [
+        p
+        for p in (
+            out / "test_detrac_deadline_fixed_eval.csv",
+            out / "test_detrac_deadline_lookup_eval.csv",
+            out / "test_detrac_deadline_dqn_eval.csv",
+            out / "test_detrac_deadline_ppo_eval.csv",
+        )
+        if p.exists()
+    ]
+    if deadline_eval:
+        chart_deadline(deadline_eval, OUT_DIR / "chart_deadline_tradeoff.png")
+        chart_final(
+            deadline_eval,
+            OUT_DIR / "chart_deadline_reward.png",
+            "Time-varying deadline, 40 test sequences, measured ROCK 5C latency",
         )
     print(f"charts written to {OUT_DIR}")
 
