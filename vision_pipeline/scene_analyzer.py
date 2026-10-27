@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
-from .yolo_detector import Detections
+if TYPE_CHECKING:  # type-only: keeps scene analysis independent of the detector backend
+    from .yolo_detector import Detections
 
 
 @dataclass
