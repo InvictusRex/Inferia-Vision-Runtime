@@ -32,7 +32,7 @@ flowchart TD
     F --> H
 ```
 
-The hardware profile is worth calling out on its own, because it is the piece that makes the whole exercise meaningful rather than academic. Training happens on a desktop GPU with far more memory and power headroom than any real edge device, so if the agent were allowed to observe and be rewarded against the training GPU's actual behaviour, it would simply learn that every configuration is free and default to the most expensive one every time. This is exactly what happened in early versions of this project. Instead, IVR simulates the resource profile of a Rockchip RK3588S2 board (the target deployment hardware), estimating VRAM use, NPU utilisation, power draw and temperature for each of the eighteen possible configurations, and it is this simulated profile, not the real training GPU, that the agent observes and is constrained by. The separation between physical specification, simulated parameters and policy budget is kept explicit in the code specifically so that swapping in real measured numbers later, once actual hardware is benchmarked, is a configuration change rather than a rewrite.
+The hardware profile is worth calling out on its own, because it is the piece that makes the whole exercise meaningful rather than academic. Training happens on a desktop GPU with far more memory and power headroom than any real edge device, so if the agent were allowed to observe and be rewarded against the training GPU's actual behaviour, it would simply learn that every configuration is free and default to the most expensive one every time. This is exactly what happened in early versions of this project. Instead, IVR models the resource profile of a Rockchip RK3588S2 board (the target deployment hardware), giving latency, shared memory use, NPU utilisation, power draw and temperature for each of the eighteen possible configurations, and it is this profile, not the real training GPU, that the agent observes and is rewarded and constrained by. The separation between physical specification, simulated parameters, policy budget and measured values is kept explicit in the code, which is what made swapping in numbers measured on the real board a configuration change rather than a rewrite.
 
 ## The state and action spaces
 
@@ -140,34 +140,50 @@ The two datasets also look different in a more literal sense. Below are real fra
 
 ## Does it actually work: results on UA-DETRAC
 
-This is the part that matters most, so it is worth being precise rather than promotional about it. DQN was trained for 120,000 steps and PPO for 300,000 steps, both from scratch, on the sixty UA-DETRAC training sequences using the real IoU matched reward described above, then evaluated on thirty held out test sequences against six baselines: three fixed configurations (always nano, always small, always medium), a random policy, a simple object count threshold rule, and a contextual bandit.
+This is the part that matters most, so it is worth being precise rather than promotional about it. DQN was trained for 120,000 steps and PPO for 300,000 steps, each from scratch with three seeds, on the sixty UA-DETRAC training sequences using the real IoU matched reward described above. Every policy was then evaluated on all forty held out test sequences, against every one of the eighteen fixed configurations rather than a hand picked few, plus a random policy, a simple object count threshold rule and a contextual bandit. The numbers below use the simulated hardware profile; the next section repeats the comparison with latency measured on the real board.
 
-![Final comparison across all policies on UA-DETRAC](docs/screenshots/review-slides/chart_final.png)
+An earlier version of this evaluation, the one shown at the second review, built its test environments from the training split's configuration, so test sequences silently found no ground truth boxes and every detection scored as a false positive. That made the quality term meaningless at test time and rewarded whichever configuration was cheapest. The environment now resolves each sequence's own annotation file and refuses to run without one, and the table below is the corrected result.
 
-| Policy | Mean reward | Std dev | Latency (ms) | FPS | Mean count | Switches per video |
-|---|---|---|---|---|---|---|
-| IVR PPO | -3.2 | 14.2 | 6.1 | 163.6 | 12.4 | 1.0 |
-| IVR DQN | -20.4 | 19.0 | 11.6 | 90.1 | 13.8 | 3.3 |
-| Always nano | -43.8 | 12.2 | 18.0 | 55.8 | 16.7 | 1.0 |
-| Always small | -139.5 | 8.1 | 45.0 | 22.4 | 19.4 | 1.0 |
-| Contextual bandit | -160.1 | 74.1 | 36.4 | 45.1 | 17.2 | 224.0 |
-| Random | -270.2 | 8.1 | 68.2 | 15.7 | 18.9 | 263.0 |
-| Rule based | -303.7 | 137.5 | 89.8 | 16.1 | 18.2 | 21.4 |
-| Always medium | -409.7 | 6.2 | 120.0 | 8.4 | 18.6 | 1.0 |
+![Every policy and all eighteen fixed configurations on UA-DETRAC](docs/screenshots/review-slides/chart_final_gt.png)
 
-Both trained policies beat every fixed configuration and every non learning baseline by a wide margin, with paired t tests against every baseline coming back at p below 1e-11. That is the headline result, and it is the first point in this project's history where the trained policies decisively outperformed simply picking one configuration and never touching it again, rather than only marginally edging it out.
+| Policy | Mean reward | Note |
+|---|---|---|
+| Always nano, 480, fp16 | 252.9 | best of the 18 fixed configurations |
+| IVR PPO (3 seeds) | 249.2 ± 6.4 | two seeds converge exactly onto nano 480 fp16, one onto nano 480 fp32 |
+| IVR DQN (3 seeds) | 246.3 ± 7.7 | one seed switches resolution with scene density, two settle near nano 480 fp16 |
+| Always nano, 480, fp32 | 241.7 | |
+| Always nano, 640, fp32 | 206.4 | |
+| Contextual bandit | 201.3 | |
+| Always small, 640, fp32 | 103.8 | |
+| Random | -30.1 | |
+| Rule based | -79.1 | |
+| Always medium, 640, fp32 | -167.1 | |
 
-Reading the table a little more carefully tells a more interesting story than "PPO wins". PPO's policy converged onto a single fixed configuration, YOLO11 nano at 480 pixels with fp16 precision, and stayed there for the entire evaluation, essentially zero real switches. It found the cheapest possible option and it happened to also be very close to the best option, because on UA-DETRAC's traffic camera footage the larger models do not detect meaningfully better than nano does, so there was no real accuracy for cost trade off left for PPO to exploit by adapting. DQN, in contrast, kept switching, toggling its resolution choice between 480 and 640 pixels depending on scene content, ninety eight switches across the thirty evaluation videos, and paid a small reward cost for that willingness to adapt. PPO is the better number. DQN is the better demonstration of the actual thing this project is trying to prove works.
+Both trained policies clearly beat every non learning scheduler and every fixed configuration that was not chosen by searching all eighteen, with paired t tests far below p = 1e-8. What they do not do is beat the best fixed configuration. Picking the best fixed configuration separately for every single test video would only add 1.5 percent over always running nano at 480 pixels, so on this dataset there is almost nothing for an adaptive policy to gain, and the honest reading is that reinforcement learning reliably finds the best fixed configuration, or one within about five percent of it, on its own. The board measurements in the next section explain why: on UA-DETRAC's traffic camera footage, nano is not only the cheapest model but also among the most accurate, so a bigger model never buys detection quality here.
 
-The clearest evidence that DQN's adaptivity is real and not a statistical artifact of the aggregate numbers comes from watching a single held out episode play out frame by frame. The chart below is not a summary statistic, it is the trained DQN policy's literal resolution choice, frame by frame, over one evaluation video, plotted against the actual object count in that video at that moment.
+The adaptive behaviour is still real where it appears. The chart below is the seed 0 DQN policy's literal resolution choice over one held out video, plotted against the object count at that moment. While the scene is crowded, in the twenties, the policy holds at 640 pixels; when the count drops into the low teens it drops to 480 and stays there. Nobody hand coded that threshold, it emerged from training against reward, but it is one seed's behaviour rather than something every run learns.
 
 ![DQN adapting its resolution choice to scene content within a single episode](docs/screenshots/review-slides/chart_trajectory.png)
 
-The object count starts high, in the twenties, for roughly the first hundred and thirty frames, and the policy holds at 640 pixels for exactly that stretch. The moment the object count drops into the low teens, the policy drops to 480 pixels and stays there. Nobody hand coded that threshold, it emerged from training against reward.
+## Running on the real board
 
-Looking at the latency and reward trade off across every policy at once makes the same point from a different angle. Both trained policies sit clearly above and to the left of every fixed baseline, meaning they get more reward for less latency than anything that was not trained.
+Everything above trains against a model of the edge device. The target is a Radxa ROCK 5C (RK3588S2, 8 GB), so every one of the eighteen configurations was converted and measured on it. The YOLO11 variants are exported to fixed shape ONNX on the host and converted on the board with RKNN-Toolkit2 into two precisions, fp16 and int8 calibrated on UA-DETRAC frames, because the NPU has no fp32 path. The runtime's fp32 and fp16 actions therefore run as NPU fp16 and NPU int8 respectively. Latency is measured end to end per frame, letterbox plus NPU plus box decoding and NMS, with the CPU, NPU and memory clocks pinned so the numbers repeat.
 
-![Latency versus reward across every evaluated policy](docs/screenshots/review-slides/chart_pareto.png)
+![Simulated versus measured latency for every configuration](docs/screenshots/review-slides/chart_board_latency.png)
+
+The simulated profile turned out to be optimistic by a factor of two to four. Nano at 480 pixels in int8 is the fastest configuration at 16.7 ms per frame, nano at 640 in fp16 takes 53 ms against a simulated 18, and medium at 960 in fp16 takes 472 ms. Using all three NPU cores barely helps a single stream at batch size one. Temperature stayed near 37 °C with the fan running, and the board has no power sensor, so power stays simulated; the unified memory delta per model was too noisy at these model sizes to replace the simulated memory estimate either.
+
+The first int8 conversion lost between 0.12 and 0.36 detection F1, because quantizing the whole detection head puts pixel scale box coordinates, the distribution focal loss softmax and 0 to 1 class scores under shared int8 scales. Cutting the graph at the six raw per scale head outputs and decoding them on the CPU, the same approach Rockchip's model zoo takes, fixed it: on the same frames the board's F1 now sits within 0.03 of the GPU detector used during training for every configuration, so the quality the policy learns against is the quality it gets when deployed.
+
+![On-device detection F1 against the training detector](docs/screenshots/review-slides/chart_board_f1.png)
+
+![Measured latency against on-device F1](docs/screenshots/review-slides/chart_board_frontier.png)
+
+The measured numbers are written into `configs/hardware_measured.yaml`, which is `configs/hardware.yaml` with its `measured:` section filled in; the edge profile uses any measured value in place of its simulated estimate, and `--hardware configs/hardware_measured.yaml` trains and evaluates against the real board. Finally, `tooling_scripts/rknn_live_demo.py` closes the loop on the device itself: a trained policy reads the same fourteen dimensional observation from the repository's own scene analyzer and picks a configuration every frame, and the NPU runs it, switching models live. The whole loop, scene analysis, NPU inference and the policy decision, runs at about 28 frames per second.
+
+Both algorithms were then retrained from scratch against the measured profile, three seeds each, and evaluated on the same forty test sequences with the board's latency in the reward. The conclusion carries over from simulation and becomes sharper. All three PPO seeds converge exactly onto nano at 480 pixels in int8, which is also the best of the eighteen fixed configurations at 223.3, and DQN lands at 220.4 ± 3.8. Real latency punishes slow choices much harder than the simulated profile did, so the contextual bandit falls to 151.9 and random to -128.7, and every trained seed beats the bandit with paired t tests around p = 1e-19. Picking the best fixed configuration per video now adds only 0.8 percent.
+
+![Every policy and all eighteen fixed configurations with measured board latency](docs/screenshots/review-slides/chart_final_board.png)
 
 ## Repository layout
 
@@ -178,7 +194,8 @@ configs/
   env/          environment configs: which dataset, which video source, episode length
   reward/       reward weight configs: proxy vs real backend, latency and compute weights
   training/     hyperparameter configs for DQN and PPO
-  hardware.yaml simulated edge device profile (Rockchip RK3588S2)
+  hardware.yaml          simulated edge device profile (Rockchip RK3588S2)
+  hardware_measured.yaml the same profile with latency, NPU load and temperature measured on the ROCK 5C
   variants.yaml model pool definition (yolo11n/s/m, GFLOPs, weight file paths)
 vision_pipeline/
   yolo_detector.py       thin wrapper around ultralytics YOLO, returns boxes + confidence + latency
@@ -192,7 +209,7 @@ reinforcement_learning/
   train_runtime.py          unified DQN / PPO training entrypoint
 runtime/
   environment_factory.py  wires yaml configs into a fully constructed environment
-  edge_profile.py         the simulated Rockchip hardware model and constraint checker
+  edge_profile.py         the Rockchip hardware model, measured values override simulated ones
   latency_estimator.py    nominal per-config latency model
   system_telemetry.py     rolling latency / fps / gpu-snapshot bookkeeping
 evaluation/
@@ -201,7 +218,15 @@ evaluation/
 model_management/
   model_variants.py         model pool registry
   runtime_config_space.py   flattens model x resolution x precision into the 18 discrete actions
-tooling_scripts/    detached training runner, multi-stage experiment sequencers, offline validation suite
+tooling_scripts/
+  detrac_full_eval_parallel.py  full UA-DETRAC test-split evaluation across policies
+  rknn_export_onnx.py           ONNX export plus calibration and evaluation frames for the board
+  rknn_convert.py               fp16 and int8 RKNN conversion (runs on the board)
+  rknn_benchmark.py             on-device latency, NPU load and detection dumps (runs on the board)
+  rknn_measured_profile.py      scores board detections and writes hardware_measured.yaml
+  rknn_live_demo.py             closed-loop policy + NPU demo (runs on the board)
+  make_review_charts.py         renders the charts in this README
+  ...                           detached runner, experiment sequencers, offline validation suite
 docs/               design notes and the screenshots referenced in this README
 train.py, eval.py, sweep.py    root level command line entrypoints
 ```
@@ -211,13 +236,15 @@ train.py, eval.py, sweep.py    root level command line entrypoints
 Training and evaluation both go through the root level launcher scripts, which take yaml config paths rather than long argument lists, so a full run looks like:
 
 ```
-python train.py --env configs/env/env_detrac.yaml --reward configs/reward/reward_detrac.yaml --training configs/training/training_bdd.yaml --algorithm dqn --timesteps 120000
+python train.py --env configs/env/env_detrac.yaml --reward configs/reward/reward_detrac.yaml --training configs/training/training_bdd.yaml --algorithm dqn --seed 0
 
-python eval.py --env configs/env/env_detrac.yaml --reward configs/reward/reward_detrac.yaml --model training/dqn_detrac_final.zip --dataset test
+python tooling_scripts/detrac_full_eval_parallel.py --fixed all --baselines --model ivr_dqn_s0=training/dqn_detrac_final.zip --output test_detrac_eval.csv
 ```
 
-Swapping `--env`/`--reward` to the BDD-A configs and pointing `--algorithm` at `ppo` trains and evaluates the same way against the older proxy reward dataset. `tooling_scripts/validate_pipeline.py` runs a thirteen check offline validation suite (constraint behaviour, checkpoint round tripping, observation sanity) that is meant to be run after any change to the environment, reward or hardware model before trusting a long training run to it.
+Adding `--hardware configs/hardware_measured.yaml` to either trains or evaluates against latency measured on the real board instead of the simulated profile, and `--constraints on` turns on the stress-test resource constraints. Swapping `--env`/`--reward` to the BDD-A configs trains and evaluates the same way against the older proxy reward dataset. `tooling_scripts/validate_pipeline.py` runs the offline validation suite (constraint behaviour, switch penalty, checkpoint round tripping, observation wiring, and that profile latency actually reaches the reward) and is meant to be run after any change to the environment, reward or hardware model before trusting a long training run to it.
+
+The board side runs from a copy of `tooling_scripts/` on the ROCK 5C: `rknn_export_onnx.py` on the host stages the ONNX models and frames, then `rknn_convert.py`, `rknn_benchmark.py --mode latency` and `--mode detect` run on the board, and `rknn_measured_profile.py` back on the host turns the results into `configs/hardware_measured.yaml`.
 
 ## Honest state of things right now
 
-The real reward pipeline works and both algorithms clearly beat every fixed baseline on it, which is the core claim this project set out to support. What it has not yet shown is an RL policy paying for a bigger model because the scene genuinely demands it on a dataset where that trade off exists in the first place, since UA-DETRAC turned out to be a dataset where the cheapest model is already close to the best one. The natural next step is evaluating on footage with more scene density variation so that model choice, not just resolution, has room to matter, along with recalibrating the reward's latency and compute weights now that quality is measured rather than guessed, and eventually replacing the simulated Rockchip hardware numbers with measurements taken from the real board.
+The pipeline is now validated end to end, from training on the host to a policy switching models live on the real NPU, and the detection quality a policy is trained against matches what the board actually delivers. On UA-DETRAC the trained policies beat every scheduler that does not search the configuration space and match the best fixed configuration, but they do not beat it, because this dataset offers almost no room for adaptation: nano is both the cheapest and among the most accurate models on fixed traffic cameras. The next step that would actually test the core idea is footage where scene difficulty changes which model is best, small or distant objects, night scenes or aerial views, so that paying for a bigger model is sometimes worth it. Power remains simulated until the board can be measured with an external USB-C meter.
