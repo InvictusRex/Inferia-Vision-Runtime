@@ -420,6 +420,32 @@ def check_end_to_end_integration(env_cfg, variants_cfg, reward_cfg, hardware_cfg
     )
 
 
+def check_profile_latency_reaches_reward(env_cfg, variants_cfg, reward_cfg, hardware_cfg) -> None:
+    """A measured per-config latency must be what the reward's latency term sees."""
+    marker_ms = 77.7
+    cs = ConfigSpace(
+        models=[m["name"] for m in variants_cfg["models"]],
+        resolutions=variants_cfg["resolutions"],
+        precisions=variants_cfg["precisions"],
+    )
+    measured = {
+        f"{c.model}_{c.resolution}_{c.precision}": {"latency_ms": marker_ms}
+        for c in (cs.action_to_config(a) for a in range(cs.n_actions))
+    }
+    hw = dict(hardware_cfg, measured={"configs": measured})
+    env = build_env_from_configs(env_cfg, variants_cfg, reward_cfg, hardware_cfg=hw)
+    env.reset()
+    seen = []
+    for action in (0, 5, 17):
+        env.step(action)
+        seen.append(env.telemetry.last_latency_ms())
+    check(
+        "12. measured hardware-profile latency reaches the reward's telemetry",
+        all(abs(v - marker_ms) < 1e-9 for v in seen),
+        f"telemetry latency after steps={seen} (expected {marker_ms})",
+    )
+
+
 def main() -> None:
     print("=== offline pipeline validation ===\n")
 
@@ -440,6 +466,7 @@ def main() -> None:
     check_action_roundtrip(cs)
     check_model_order_independence(cs)
     check_end_to_end_integration(env_cfg, variants_cfg, reward_cfg, hw_cfg)
+    check_profile_latency_reaches_reward(env_cfg, variants_cfg, reward_cfg, hw_cfg)
 
     print()
     if FAILURES:

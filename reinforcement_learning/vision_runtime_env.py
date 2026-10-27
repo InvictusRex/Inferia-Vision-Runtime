@@ -140,14 +140,20 @@ class VisionRuntimeEnv(gym.Env):
     def _infer(self, frame: np.ndarray, action: int) -> Detections:
         config = self.config_space.action_to_config(action)
         detections = self.detector.detect(frame, config)
+        snap = self.edge_profile.snapshot(config) if self.edge_profile is not None else None
         if self.latency_estimator is not None and self.telemetry.latencies_ms:
-            latency = self.latency_estimator.latency_ms(
-                config.model, config.resolution, config.precision
+            # The edge profile is the device latency model when present: it carries measured
+            # board values and thermal throttling, which the nominal estimator alone does not.
+            latency = (
+                snap.latency_ms
+                if snap is not None
+                else self.latency_estimator.latency_ms(
+                    config.model, config.resolution, config.precision
+                )
             )
             if latency > 0:
                 self.telemetry.latencies_ms[-1] = latency
-        if self.edge_profile is not None:
-            snap = self.edge_profile.snapshot(config)
+        if snap is not None:
             self.telemetry.record_gpu(
                 GpuSnapshot(
                     npu_util_pct=snap.npu_util_pct,
