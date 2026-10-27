@@ -14,7 +14,7 @@ The BDD-A dataset is a sibling directory referenced as `..\BDDA\BDDA`.
 Test-Path "../BDDA/BDDA/training/camera_videos"
 ```
 
-Should print `True`. (926 / 203 / 306 videos across train / val / test.)
+Should print `True`. (925 / 203 / 306 videos across train / val / test.)
 
 ## 2. Train the DQN (the main command)
 

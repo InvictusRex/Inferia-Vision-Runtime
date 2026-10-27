@@ -63,6 +63,6 @@ deferred to **Phase 2a**.
 
 - 3-action Phase 1 checkpoint `training/dqn_final.zip` is **incompatible** with
   the Phase 2a 18-action space `{n,s,m}×{480,640,960}×{fp32,fp16}`.
-- Phase 2a retrains on **BDD-A** (926 train / 203 val / 306 test dashcam videos),
+- Phase 2a retrains on **BDD-A** (925 train / 203 val / 306 test dashcam videos),
   chunked 150–300-frame episodes → outcome recorded in `docs/knowledge_graph.json`
   (`phase_2a_bdd_training`) and `docs/plan.md` Phase-2 checklist.

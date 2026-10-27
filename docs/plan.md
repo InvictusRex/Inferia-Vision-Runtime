@@ -1,7 +1,7 @@
 # Inferia Vision Runtime (IVR) — Project Plan & Source of Truth
 
 > **Status:** Active / Under development
-> **Last updated:** 2026-08-07
+> **Last updated:** 2026-10-27
 > **This document is the single source of truth** for the IVR project across all phases.
 > Changes to scope, architecture, reward design, or roadmap MUST be reflected here first.
 
@@ -383,35 +383,43 @@ CLI entrypoints: `python -m evaluation.benchmark_runner` (baselines comparison,
 - [x] Expand action space to model × resolution × precision
   (`{n,s,m} × {480,640,960} × {fp32,fp16}` = **18 actions**, Phase 2a)
 - [x] Multi-video dataset training: BDD-A dashcam videos
-  (`../BDDA/BDDA`, 926 train / 203 val / 306 test, 720p 30fps clips),
+  (`../BDDA/BDDA`, 925 train / 203 val / 306 test, 720p 30fps clips),
   chunked episodes (150–300 frames, random video + random offset, seeded)
 - [x] DQN retrained on BDD-A with the 18-action space + edge-profile reward
   (completed 2026-08-08, 120k steps DQN, checkpoint `training/dqn_bdd_final.zip`;
   eval on all 306 test videos: claim vs `always-yolo11s@640-fp32` MET
   (+11.8, paired t-test p<0.001, 65% wins). Caveat: `always-yolo11n` (+178.6)
   still leads overall — BDD-A is mostly mid/sparse density where nano's cheap
-  latency wins the tuned reward. DQN dominates dense scenes (291.6 vs nano
-  257.1 / small 250.2). Details in `docs/knowledge_graph.json` → `phase_2a_bdd_training`.)
-- [ ] PPO alongside DQN (`sweep.py`; PPO 300k + w_switch sweep)
+  latency wins the tuned reward. The recorded "DQN dominates dense scenes" figure
+  binned videos by the DQN's own object count and does not reproduce with
+  policy-independent bins: nano leads in every density bin.)
+- [x] PPO alongside DQN (300k steps), trained and evaluated head to head
+- [x] UA-DETRAC with a real IoU-matched F1 reward (`MapReward`); DQN and PPO with
+      3 seeds each, evaluated on all 40 test sequences against all 18 fixed
+      configurations (see README for results)
 - [x] **EdgeProfile hardware emulation** (`EdgeProfile` for VRAM/util/power/temp;
       constraint-aware reward with heavy penalties; obs 10→14 dims w/ emulated
       GPU metrics) — built 2026-08-08, smoke-tested
 - [ ] NVML telemetry (debug/validation hook only, gated off by default)
 - [x] Constraint-aware rewards (hard constraints + priority weights) — built
       2026-08-08 (`configs/reward/reward_constrained_bdd.yaml`, `--constraints on|off`)
-- [ ] Switching-penalty tuning (`sweep.py --sweep-values`, results pending)
+- [ ] Switching-penalty tuning: the 2026-08 sweep ran on an off-by-one penalty and was never
+      evaluated; not repeated after the fix
 
 ### Phase 3 — Edge Runtime
-- [ ] TensorRT and ONNX Runtime backends behind `Detector` interface
-- [ ] FP16 / INT8 precision variants
-- [ ] Real hardware benchmarking with measured energy + thermal
+- [x] RKNN backend for the ROCK 5C NPU (the RK3588 has no TensorRT): ONNX export,
+      fp16 and int8 conversion, head decoded on the CPU (`tooling_scripts/rknn_*.py`)
+- [x] FP16 / INT8 precision variants (the NPU's fp16 and int8 back the fp32/fp16 actions)
+- [x] Real hardware benchmarking: latency, NPU load and thermal measured on the board and
+      written to `configs/hardware_measured.yaml`; energy still simulated (no power sensor)
+- [x] Closed-loop policy + NPU demo on the board (`tooling_scripts/rknn_live_demo.py`)
 - [ ] Constraint solver: min FPS / max latency / max power / max memory / thermal
 
 ### Phase 4 — Research
 - [ ] Multiple datasets, generalization experiments
 - [ ] Ablation studies
 - [ ] Pareto frontier analysis
-- [ ] Comparison vs non-RL schedulers
+- [x] Comparison vs non-RL schedulers (random, rule based, contextual bandit, all 18 fixed)
 - [ ] Paper preparation
 - [ ] Non-YOLO detector integration (RT-DETR, DINO, SAM) via the same interface
 
