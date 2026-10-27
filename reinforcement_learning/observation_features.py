@@ -19,7 +19,13 @@ class FeatureBuilder:
         power_budget_w: float = 40.0,
         ambient_temp_c: float = 35.0,
         throttle_temp_c: float = 80.0,
+        deadline_levels_ms: list[float] | None = None,
     ):
+        # With deadline levels, dims 14.. are a thermometer code of the latency deadline
+        # the next config must meet: one flag per level, set when deadline >= level. A
+        # single log-scaled scalar left the levels too close for the Q-network to learn
+        # sharp per-level cut-offs; a deadline between levels reads as the lower one.
+        self.deadline_levels_ms = sorted(float(d) for d in deadline_levels_ms or [])
         self.n_actions = max(2, int(n_actions))
         # Dims 10-13 are normalized against the `simulated`/`policy` hardware
         # values (configs/hardware.yaml), not fixed constants, so the observation
@@ -31,16 +37,22 @@ class FeatureBuilder:
 
     @property
     def dim(self) -> int:
-        return self.DIM
+        return self.DIM + len(self.deadline_levels_ms)
 
     @staticmethod
     def _gpu(telemetry: Telemetry) -> GpuSnapshot:
         gpu = telemetry.gpu
         return gpu if gpu is not None else GpuSnapshot()
 
-    def build(self, scene: SceneFeatures, telemetry: Telemetry, action: int) -> np.ndarray:
+    def build(
+        self,
+        scene: SceneFeatures,
+        telemetry: Telemetry,
+        action: int,
+        deadline_ms: float | None = None,
+    ) -> np.ndarray:
         gpu = self._gpu(telemetry)
-        v = np.zeros(self.DIM, dtype=np.float32)
+        v = np.zeros(self.dim, dtype=np.float32)
         v[0] = float(np.clip(scene.motion, 0.0, 1.0))
         v[1] = float(np.clip(scene.obj_count / self.MAX_COUNT, 0.0, 1.0))
         v[2] = float(np.clip(scene.mean_conf, 0.0, 1.0))
@@ -59,4 +71,8 @@ class FeatureBuilder:
         v[12] = float(np.clip((gpu.temp_c - self.ambient_temp_c) / self._temp_span, 0.0, 1.0))
         # Power-budget pressure (fraction of the IVR policy power budget).
         v[13] = float(np.clip(gpu.power_w / self.power_budget_w, 0.0, 1.0))
+        if self.deadline_levels_ms:
+            if deadline_ms is None:
+                raise ValueError("deadline observation enabled but no deadline_ms given")
+            v[self.DIM:] = [float(deadline_ms >= d) for d in self.deadline_levels_ms]
         return v

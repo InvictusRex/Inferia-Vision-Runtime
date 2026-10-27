@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import zlib
 from dataclasses import fields
 from pathlib import Path
 
@@ -98,6 +99,7 @@ def build_env_from_configs(
         )
         edge_profile = EdgeProfile.from_configs(hardware_cfg, variants, edge_estimator)
 
+    deadline_levels = env_cfg.get("deadline_levels_ms") or []
     if edge_profile is not None:
         sim = edge_profile.profile.simulated
         features = FeatureBuilder(
@@ -105,9 +107,10 @@ def build_env_from_configs(
             power_budget_w=edge_profile.profile.policy.power_budget_w,
             ambient_temp_c=sim.ambient_temp_c,
             throttle_temp_c=sim.thermal_throttle_temp_c,
+            deadline_levels_ms=deadline_levels,
         )
     else:
-        features = FeatureBuilder(n_actions=config_space.n_actions)
+        features = FeatureBuilder(n_actions=config_space.n_actions, deadline_levels_ms=deadline_levels)
 
     if env_cfg.get("dataset_type") == "detrac":
         dataset_dir = env_cfg["dataset_dir"]
@@ -153,4 +156,9 @@ def build_env_from_configs(
         max_episode_frames=max_episode_frames,
         episode_min_frames=episode_min_frames,
         edge_profile=edge_profile,
+        deadline_levels_ms=deadline_levels,
+        deadline_hold_frames=tuple(env_cfg.get("deadline_hold_frames", (50, 150))),
+        # per-video schedule in evaluation, identical for every policy run on that video
+        deadline_seed=int(env_cfg.get("seed", 0))
+        + (zlib.crc32(Path(video_override).name.encode()) if video_override else 0),
     )

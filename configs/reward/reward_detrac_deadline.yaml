@@ -1,0 +1,21 @@
+# Accuracy under a time-varying latency deadline (env_detrac_deadline.yaml).
+# Latency is no longer penalised continuously: a frame either meets the deadline or
+# pays w_deadline. Quality uses the official UA-DETRAC scoring (vehicle classes only,
+# ignored regions masked); without it larger models are wrongly scored lower.
+quality_backend: map
+w_quality: 2.0
+w_latency: 0.0
+w_compute: 0.0
+w_switch: 0.3
+w_deadline: 2.0
+target_count: 10.0
+max_latency_ms: 100.0
+min_fps: 0.0
+labels_path: null
+latency_source: edge_profile
+latency_jitter_ms: 0.0
+constraints: {}
+constraint_weights: {}
+map_iou_threshold: 0.5
+vehicle_classes: [2, 5, 7]  # COCO car, bus, truck
+mask_ignored_regions: true

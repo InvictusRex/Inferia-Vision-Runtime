@@ -29,11 +29,17 @@ class RewardConfig:
     constraint_default_weight: float = 2.0
     constraint_cliff: float = 0.0
     map_iou_threshold: float = 0.5
+    w_deadline: float = 2.0
+    # Official UA-DETRAC scoring: only these detector classes count (empty = all), and
+    # predictions centred in a sequence's ignored regions are dropped before matching.
+    vehicle_classes: tuple[int, ...] = ()
+    mask_ignored_regions: bool = False
 
 
 class RewardCalculator:
     def __init__(self, cfg: RewardConfig):
         self.cfg = cfg
+        self.last_quality = 0.0
 
     def compute(
         self,
@@ -43,6 +49,8 @@ class RewardCalculator:
         prev_action: int | None,
         action: int,
         gt_boxes: np.ndarray | None = None,
+        deadline_ms: float | None = None,
+        ignored_regions: np.ndarray | None = None,
     ) -> float:
         raise NotImplementedError
 
@@ -86,9 +94,23 @@ def _detection_f1(pred_boxes: np.ndarray, gt_boxes: np.ndarray, iou_threshold: f
     return 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
 
+def drop_ignored(boxes: np.ndarray, regions: np.ndarray) -> np.ndarray:
+    """Drop boxes whose centre falls inside any ignored region."""
+    if len(boxes) == 0 or len(regions) == 0:
+        return boxes
+    cx = ((boxes[:, 0] + boxes[:, 2]) / 2)[:, None]
+    cy = ((boxes[:, 1] + boxes[:, 3]) / 2)[:, None]
+    inside = (cx >= regions[:, 0]) & (cx <= regions[:, 2]) & (cy >= regions[:, 1]) & (cy <= regions[:, 3])
+    return boxes[~inside.any(axis=1)]
+
+
 class ProxyReward(RewardCalculator):
     def _quality(
-        self, detections: Detections, scene: SceneFeatures, gt_boxes: np.ndarray | None
+        self,
+        detections: Detections,
+        scene: SceneFeatures,
+        gt_boxes: np.ndarray | None,
+        ignored_regions: np.ndarray | None = None,
     ) -> float:
         count = len(detections)
         mean_conf = float(detections.confs.mean()) if count else 0.0
@@ -102,14 +124,19 @@ class ProxyReward(RewardCalculator):
         prev_action: int | None,
         action: int,
         gt_boxes: np.ndarray | None = None,
+        deadline_ms: float | None = None,
+        ignored_regions: np.ndarray | None = None,
     ) -> float:
         cfg = self.cfg
-        quality = self._quality(detections, scene, gt_boxes)
+        quality = self._quality(detections, scene, gt_boxes, ignored_regions)
+        self.last_quality = quality
         stability = float(scene.temporal_consistency)
         quality_term = cfg.w_quality * (0.7 * quality + 0.3 * stability)
 
         latency = telemetry.last_latency_ms()
         latency_term = -cfg.w_latency * min(1.0, latency / max(cfg.max_latency_ms, 1e-6))
+        if deadline_ms is not None and latency > deadline_ms:
+            latency_term -= cfg.w_deadline
 
         compute_term = 0.0
         if cfg.compute_cost and action < len(cfg.compute_cost):
@@ -141,11 +168,22 @@ class MapReward(ProxyReward):
     proxy. Requires gt_boxes to be passed into compute() each step."""
 
     def _quality(
-        self, detections: Detections, scene: SceneFeatures, gt_boxes: np.ndarray | None
+        self,
+        detections: Detections,
+        scene: SceneFeatures,
+        gt_boxes: np.ndarray | None,
+        ignored_regions: np.ndarray | None = None,
     ) -> float:
         if gt_boxes is None:
             raise ValueError("MapReward.compute() requires gt_boxes (per-frame ground truth)")
-        return _detection_f1(detections.boxes, gt_boxes, self.cfg.map_iou_threshold)
+        boxes = detections.boxes
+        if self.cfg.vehicle_classes:
+            boxes = boxes[np.isin(detections.cls_ids, self.cfg.vehicle_classes)]
+        if self.cfg.mask_ignored_regions:
+            if ignored_regions is None:
+                raise ValueError("mask_ignored_regions needs the sequence's ignored regions")
+            boxes = drop_ignored(boxes, ignored_regions)
+        return _detection_f1(boxes, gt_boxes, self.cfg.map_iou_threshold)
 
 
 def build_reward(cfg: RewardConfig) -> RewardCalculator:

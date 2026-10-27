@@ -1,0 +1,14 @@
+dataset_type: detrac
+dataset_dir: ../ua-detrac-orig
+dataset_split: train
+frame_step: 1
+episode_min_frames: 150
+max_episode_frames: 300
+conf_threshold: 0.25
+device: cuda
+seed: 0
+# Time-varying per-frame latency deadline (ms), redrawn after a random hold.
+# Levels sit between the measured ROCK 5C latencies so each unlocks a more
+# accurate config: n480 int8 16.7, s480 int8 24.4, s640 int8 42.8, s960 int8 94.1, m960 int8 199.6.
+deadline_levels_ms: [20, 30, 50, 100, 250]
+deadline_hold_frames: [50, 150]

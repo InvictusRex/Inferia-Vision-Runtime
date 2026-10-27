@@ -12,9 +12,9 @@ from .video_frame_source import FrameSource
 def load_detrac_annotations(xml_path: str) -> dict[int, np.ndarray]:
     """Parse a DETRAC-Train/Test-Annotations-XML file into {frame_num: (N,4) xyxy boxes}.
 
-    Class-agnostic (car/bus/van/others all count as "vehicle"), ignored_region
-    and occlusion/truncation metadata are not applied -- a fast, honest
-    simplification, not a full benchmark-grade evaluation protocol.
+    Class-agnostic (car/bus/van/others all count as "vehicle"); occlusion and
+    truncation metadata are not applied. Ignored regions are loaded separately by
+    load_detrac_ignored_regions().
     """
     root = ET.parse(xml_path).getroot()
     frames: dict[int, np.ndarray] = {}
@@ -31,6 +31,18 @@ def load_detrac_annotations(xml_path: str) -> dict[int, np.ndarray]:
             np.array(boxes, dtype=np.float32) if boxes else np.zeros((0, 4), dtype=np.float32)
         )
     return frames
+
+
+def load_detrac_ignored_regions(xml_path: str) -> np.ndarray:
+    """The sequence's ignored_region boxes as (K,4) xyxy: areas the annotators left
+    unlabelled (parked cars, far traffic), excluded from scoring by the benchmark."""
+    root = ET.parse(xml_path).getroot()
+    boxes = [
+        (float(b.get("left")), float(b.get("top")),
+         float(b.get("left")) + float(b.get("width")), float(b.get("top")) + float(b.get("height")))
+        for b in root.findall("./ignored_region/box")
+    ]
+    return np.array(boxes, dtype=np.float32).reshape(-1, 4)
 
 
 class DetracFrameSource(FrameSource):
@@ -52,6 +64,7 @@ class DetracFrameSource(FrameSource):
         self.xml_dir = Path(xml_dir)
         self._rng = np.random.default_rng(int(seed))
         self._annotations: dict[str, dict[int, np.ndarray]] = {}
+        self._ignored: dict[str, np.ndarray] = {}
         self._current_index = 0
         self._start_frame = 0
         self._max_frames: int | None = None
@@ -137,3 +150,9 @@ class DetracFrameSource(FrameSource):
     def gt_for_current_frame(self) -> np.ndarray:
         anns = self._annotations_for(self.sequences[self._current_index])
         return anns.get(self._current_abs_frame, np.zeros((0, 4), dtype=np.float32))
+
+    def ignored_for_current_sequence(self) -> np.ndarray:
+        name = self.sequences[self._current_index].name
+        if name not in self._ignored:
+            self._ignored[name] = load_detrac_ignored_regions(str(self.xml_dir / f"{name}.xml"))
+        return self._ignored[name]

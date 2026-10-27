@@ -35,6 +35,9 @@ class VisionRuntimeEnv(gym.Env):
         max_episode_frames: Optional[int] = None,
         episode_min_frames: int = 150,
         edge_profile: Optional[EdgeProfile] = None,
+        deadline_levels_ms: Optional[list[float]] = None,
+        deadline_hold_frames: tuple[int, int] = (50, 150),
+        deadline_seed: int = 0,
     ):
         super().__init__()
         self.frame_source = frame_source
@@ -49,6 +52,13 @@ class VisionRuntimeEnv(gym.Env):
         self.edge_profile = edge_profile
         self.max_episode_frames = max_episode_frames
         self.episode_min_frames = max(1, int(episode_min_frames))
+        # Time-varying latency deadline: piecewise constant, redrawn from the levels after a
+        # random hold. Its own RNG so every policy evaluated on a video sees the same schedule.
+        self.deadline_levels_ms = [float(d) for d in deadline_levels_ms or []]
+        self.deadline_hold_frames = (int(deadline_hold_frames[0]), int(deadline_hold_frames[1]))
+        self._deadline_rng = np.random.default_rng(deadline_seed)
+        self._deadline_ms: Optional[float] = None
+        self._deadline_left = 0
 
         self.action_space = spaces.Discrete(self.config_space.n_actions)
         self.observation_space = spaces.Box(
@@ -60,6 +70,15 @@ class VisionRuntimeEnv(gym.Env):
         self._current_action = 0
         self._prev_action: Optional[int] = None
         self._scene: Optional[SceneFeatures] = None
+
+    def _advance_deadline(self) -> None:
+        if not self.deadline_levels_ms:
+            return
+        if self._deadline_left <= 0:
+            self._deadline_ms = float(self._deadline_rng.choice(self.deadline_levels_ms))
+            lo, hi = self.deadline_hold_frames
+            self._deadline_left = int(self._deadline_rng.integers(lo, hi + 1))
+        self._deadline_left -= 1
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -85,9 +104,13 @@ class VisionRuntimeEnv(gym.Env):
         if frame is None:
             raise RuntimeError("video has no frames")
         self._frame_idx = 1
+        self._deadline_left = 0
         detections = self._infer(frame, 0)
         self._scene = self.analyzer.analyze(frame, detections)
-        obs = self.features.build(self._scene, self.telemetry, self._current_action)
+        self._advance_deadline()
+        obs = self.features.build(
+            self._scene, self.telemetry, self._current_action, self._deadline_ms
+        )
         info = self._make_info(detections, obs=obs, reward=0.0)
         return obs, info
 
@@ -99,6 +122,7 @@ class VisionRuntimeEnv(gym.Env):
                 self._scene or SceneFeatures(),
                 self.telemetry,
                 self._current_action,
+                self._deadline_ms,
             )
             info = self._make_info(
                 Detections(
@@ -119,9 +143,13 @@ class VisionRuntimeEnv(gym.Env):
         self._scene = scene
         self._frame_idx += 1
 
-        gt_boxes = None
+        gt_boxes = ignored = None
         if hasattr(self.frame_source, "gt_for_current_frame"):
             gt_boxes = self.frame_source.gt_for_current_frame()
+        if hasattr(self.frame_source, "ignored_for_current_sequence"):
+            ignored = self.frame_source.ignored_for_current_sequence()
+        # the deadline this action was chosen against (shown in the previous observation)
+        deadline_ms = self._deadline_ms
         reward = self.reward.compute(
             detections,
             scene,
@@ -129,12 +157,20 @@ class VisionRuntimeEnv(gym.Env):
             self._prev_action,
             action,
             gt_boxes=gt_boxes,
+            deadline_ms=deadline_ms,
+            ignored_regions=ignored,
         )
         self._prev_action = action
         self._current_action = action
 
-        obs = self.features.build(scene, self.telemetry, action)
+        self._advance_deadline()
+        obs = self.features.build(scene, self.telemetry, action, self._deadline_ms)
         info = self._make_info(detections, obs=obs, reward=reward)
+        info["quality"] = float(self.reward.last_quality)
+        info["deadline_ms"] = deadline_ms
+        info["deadline_miss"] = int(
+            deadline_ms is not None and self.telemetry.last_latency_ms() > deadline_ms
+        )
         return obs, float(reward), False, False, info
 
     def _infer(self, frame: np.ndarray, action: int) -> Detections:
@@ -200,4 +236,5 @@ class VisionRuntimeEnv(gym.Env):
             ),
             "reward": float(reward),
             "obs": obs,
+            "next_deadline_ms": self._deadline_ms,
         }

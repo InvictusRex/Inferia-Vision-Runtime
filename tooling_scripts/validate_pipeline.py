@@ -32,6 +32,7 @@ from model_management.runtime_config_space import (  # noqa: E402
     RuntimeConfig,
 )
 from reinforcement_learning.reward_calculator import (  # noqa: E402
+    MapReward,
     ProxyReward,
     RewardConfig,
 )
@@ -446,6 +447,68 @@ def check_profile_latency_reaches_reward(env_cfg, variants_cfg, reward_cfg, hard
     )
 
 
+def check_official_scoring() -> None:
+    """Non-vehicle classes and boxes in ignored regions must not count against F1."""
+    gt = np.array([[10, 10, 50, 50]], dtype=np.float32)
+    detections = Detections(
+        boxes=np.array([[10, 10, 50, 50], [100, 100, 140, 140], [200, 10, 240, 50]], dtype=float),
+        confs=np.full(3, 0.8),
+        cls_ids=np.array([2, 0, 7]),  # car, person, truck (inside the ignored region)
+        names=["car", "person", "truck"],
+        latency_ms=20.0,
+    )
+    ignored = np.array([[190, 0, 300, 60]], dtype=np.float32)
+    telemetry = Telemetry()
+    telemetry.record(20.0)
+    scores = {}
+    for name, extra in (
+        ("plain", {}),
+        ("official", {"vehicle_classes": (2, 5, 7), "mask_ignored_regions": True}),
+    ):
+        reward = MapReward(RewardConfig(quality_backend="map", **extra))
+        reward.compute(detections, SceneFeatures(), telemetry, None, 0, gt_boxes=gt, ignored_regions=ignored)
+        scores[name] = reward.last_quality
+    check(
+        "13. official UA-DETRAC scoring drops non-vehicle and ignored-region detections",
+        abs(scores["plain"] - 0.5) < 1e-9 and abs(scores["official"] - 1.0) < 1e-9,
+        f"F1 plain={scores['plain']:.3f} (expected 0.5) official={scores['official']:.3f} (expected 1.0)",
+    )
+
+
+def check_deadline(variants_cfg, hardware_cfg) -> None:
+    """The deadline is observed one step ahead and a miss costs exactly w_deadline."""
+    env_cfg = load_yaml("configs/env/env_detrac_deadline.yaml")
+    reward_cfg = load_yaml("configs/reward/reward_detrac_deadline.yaml")
+    env = build_env_from_configs(env_cfg, variants_cfg, reward_cfg, hardware_cfg=hardware_cfg)
+    obs, info = env.reset()
+    levels = env.features.deadline_levels_ms
+    ok_obs = ok_miss = True
+    changes = 0
+    for t in range(200):
+        shown = info["next_deadline_ms"]
+        ok_obs &= list(obs[14:]) == [float(shown >= d) for d in levels]
+        obs, _, _, truncated, info = env.step(t % env.action_space.n)
+        if truncated:
+            break
+        ok_miss &= info["deadline_ms"] == shown
+        ok_miss &= info["deadline_miss"] == int(info["latency_ms"] > shown)
+        changes += info["next_deadline_ms"] != shown
+    cfg = RewardConfig(w_latency=0.0, w_compute=0.0, w_switch=0.0, min_fps=0.0, w_deadline=2.0)
+    telemetry = Telemetry()
+    telemetry.record(42.75)
+    detections = Detections(np.zeros((0, 4)), np.zeros(0), np.zeros(0, dtype=int), [], 42.75)
+    met, missed = (
+        ProxyReward(cfg).compute(detections, SceneFeatures(), telemetry, None, 0, deadline_ms=d)
+        for d in (50.0, 30.0)
+    )
+    check(
+        "14. time-varying deadline is observed before it applies and a miss costs w_deadline",
+        env.features.dim == 14 + len(levels) and ok_obs and ok_miss and changes > 0 and abs(met - missed - 2.0) < 1e-9,
+        f"obs dim={env.features.dim} obs_ok={ok_obs} miss_ok={ok_miss} changes={changes} "
+        f"penalty={met - missed:.3f} (expected 2.0)",
+    )
+
+
 def main() -> None:
     print("=== offline pipeline validation ===\n")
 
@@ -467,6 +530,8 @@ def main() -> None:
     check_model_order_independence(cs)
     check_end_to_end_integration(env_cfg, variants_cfg, reward_cfg, hw_cfg)
     check_profile_latency_reaches_reward(env_cfg, variants_cfg, reward_cfg, hw_cfg)
+    check_official_scoring()
+    check_deadline(variants_cfg, load_yaml("configs/hardware_measured.yaml"))
 
     print()
     if FAILURES:
