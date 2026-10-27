@@ -21,6 +21,7 @@ from pathlib import Path
 from evaluation.baseline_schedulers import (
     AlwaysConfig,
     ContextualBandit,
+    DeadlineLookup,
     RandomPolicy,
     RuleBasedPolicy,
     SB3Policy,
@@ -48,6 +49,8 @@ def _build_policy(env, spec: tuple):
         return RuleBasedPolicy(env)
     if kind == "contextual_bandit":
         return ContextualBandit(env.action_space.n)
+    if kind == "deadline_lookup":
+        return DeadlineLookup(env, accuracy=spec[1])
     if kind in ("dqn", "ppo"):
         from stable_baselines3 import DQN, PPO
 

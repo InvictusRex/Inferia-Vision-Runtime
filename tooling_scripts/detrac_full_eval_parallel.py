@@ -48,6 +48,11 @@ def main() -> None:
         default=[],
         help="trained checkpoint as name=path.zip (repeatable)",
     )
+    parser.add_argument(
+        "--deadline-lookup",
+        default=None,
+        help="add the deadline lookup schedulers; value is a yaml of per model_res accuracy",
+    )
     parser.add_argument("--constraints", choices=["on", "off"], default=None)
     parser.add_argument("--n-videos", type=int, default=None)
     parser.add_argument("--workers", type=int, default=5)
@@ -84,6 +89,8 @@ def main() -> None:
     specs: list[tuple] = [("always", m, r, p) for m, r, p in grid]
     if args.baselines:
         specs += [("random",), ("rule_based",), ("contextual_bandit",)]
+    if args.deadline_lookup:
+        specs += [("deadline_lookup", None), ("deadline_lookup", load_yaml(args.deadline_lookup))]
     for item in args.model:
         name, path = item.split("=", 1)
         kind = "ppo" if "ppo" in Path(path).stem.lower() else "dqn"

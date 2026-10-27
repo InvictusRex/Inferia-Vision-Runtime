@@ -72,6 +72,8 @@ def run_episode(env: VisionRuntimeEnv, policy: Policy, max_steps: int | None = N
     powers: list[float] = []
     temps: list[float] = []
     violation_frames = 0
+    qualities: list[float] = []
+    deadline_misses = 0
     model_counts: dict[str, int] = {}
     resolution_counts: dict[int, int] = {}
     precision_counts: dict[str, int] = {}
@@ -99,6 +101,8 @@ def run_episode(env: VisionRuntimeEnv, policy: Policy, max_steps: int | None = N
         temps.append(float(info["temp_c"]))
         if info["constraint_violation_count"] > 0:
             violation_frames += 1
+        qualities.append(float(info.get("quality", 0.0)))
+        deadline_misses += int(info.get("deadline_miss", 0))
         model_counts[info["model"]] = model_counts.get(info["model"], 0) + 1
         resolution_counts[info["resolution"]] = resolution_counts.get(info["resolution"], 0) + 1
         precision_counts[info["precision"]] = precision_counts.get(info["precision"], 0) + 1
@@ -123,6 +127,9 @@ def run_episode(env: VisionRuntimeEnv, policy: Policy, max_steps: int | None = N
         "violation_rate": violation_frames / steps if steps else 0.0,
         "switches": switches,
         "switch_rate": switches / steps if steps else 0.0,
+        "mean_quality": float(np.mean(qualities)) if qualities else 0.0,
+        "deadline_misses": int(deadline_misses),
+        "deadline_miss_rate": deadline_misses / steps if steps else 0.0,
         "model_counts": model_counts,
         "resolution_counts": resolution_counts,
         "precision_counts": precision_counts,
@@ -196,6 +203,9 @@ def _csv_fieldnames(models: list[str], resolutions: list[int], precisions: list[
             "violation_rate",
             "switches",
             "switch_rate",
+            "mean_quality",
+            "deadline_misses",
+            "deadline_miss_rate",
             "bin_sparse_reward",
             "bin_mid_reward",
             "bin_dense_reward",

@@ -120,6 +120,30 @@ class ContextualBandit(Policy):
         self._q[b, action] += (reward - self._q[b, action]) / k
 
 
+class DeadlineLookup(Policy):
+    """Hand-built deadline scheduler: the best config whose profiled latency fits the
+    deadline shown for the next frame. With `accuracy` ({"model_res": score}) it ranks by
+    that table, otherwise it assumes slower means more accurate. Ties go to the faster
+    config, so the board's int8 builds win over fp16 ones at equal accuracy."""
+
+    def __init__(self, env: VisionRuntimeEnv, accuracy: dict | None = None, name: str | None = None):
+        super().__init__(env.action_space.n)
+        self.name = name or ("deadline_lookup_table" if accuracy else "deadline_lookup_slowest_fit")
+        measured = env.edge_profile.profile.measured
+        self._options = []
+        for a in range(self.n_actions):
+            c = env.config_space.action_to_config(a)
+            latency = measured[f"{c.model}_{c.resolution}_{c.precision}"]["latency_ms"]
+            score = accuracy[f"{c.model}_{c.resolution}"] if accuracy else latency
+            self._options.append((latency, score, a))
+        self._fastest = min(self._options)[2]
+
+    def choose(self, obs: np.ndarray, info: dict) -> int:
+        deadline = info["next_deadline_ms"]
+        fits = [(score, -latency, a) for latency, score, a in self._options if latency <= deadline]
+        return max(fits)[2] if fits else self._fastest
+
+
 class SB3Policy(Policy):
     def __init__(self, model, name: str = "ivr_rl"):
         self.model = model
