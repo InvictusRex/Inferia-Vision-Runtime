@@ -39,7 +39,11 @@ from stable_baselines3 import DQN, PPO  # isort: skip
 from rknn_benchmark import NPU_TEMP, infer, letterbox, open_runtime, postprocess, read_temp
 
 VEHICLE_CLASSES = (2, 5, 7)  # COCO car, bus, truck: what the official scoring counts
-MODEL_COLORS = {"yolo11n": (94, 197, 34), "yolo11s": (11, 158, 245), "yolo11m": (246, 92, 139)}  # BGR
+# one colour per configuration: the model picks the hue family (n green, s orange, m purple),
+# the board precision shifts the hue within it and the resolution sets the shade (480 light, 960 deep)
+MODEL_HUE = {"yolo11n": 60, "yolo11s": 12, "yolo11m": 140}  # OpenCV hue, 0-180
+PRECISION_HUE_SHIFT = {"int8": 0, "fp16": 14}
+RESOLUTION_SV = {480: (140, 255), 640: (205, 235), 960: (255, 185)}
 PANEL_W, STRIP_H = 440, 150
 INK, MUTED, BG = (241, 245, 249), (148, 163, 184), (42, 23, 15)
 GOOD, BAD = (94, 197, 34), (68, 68, 239)
@@ -72,6 +76,22 @@ def _text(img, s, xy, scale=0.6, color=INK, thick=1):
     cv2.putText(img, s, xy, FONT, scale, color, thick, cv2.LINE_AA)
 
 
+def config_color(model: str, resolution: int, board_precision: str) -> tuple[int, int, int]:
+    """BGR colour of one runtime configuration."""
+    hue = (MODEL_HUE[model] + PRECISION_HUE_SHIFT[board_precision]) % 180
+    sat, val = RESOLUTION_SV[int(resolution)]
+    b, g, r = cv2.cvtColor(np.uint8([[[hue, sat, val]]]), cv2.COLOR_HSV2BGR)[0, 0]
+    return int(b), int(g), int(r)
+
+
+def config_key(row: dict) -> tuple[str, int, str]:
+    return row["model"], int(row["resolution"]), row["board_precision"]
+
+
+def config_label(key: tuple[str, int, str]) -> str:
+    return f"{key[0][-1]}{key[1]} {key[2]}"
+
+
 def draw_frame(
     frame: np.ndarray, dets: np.ndarray, history: list[dict], state: dict, deadline_levels: list[float]
 ) -> np.ndarray:
@@ -82,16 +102,19 @@ def draw_frame(
     view = frame.copy()
     for x1, y1, x2, y2 in dets[:, :4].astype(int):
         cv2.rectangle(view, (x1, y1), (x2, y2), (0, 220, 60), 2)
+    x, cur = w + 20, history[-1]
+    color = config_color(*config_key(cur))
+    cv2.rectangle(view, (2, 2), (w - 3, h - 3), color, 5)  # frame border in the running config's colour
     canvas[:h, :w] = view
 
-    x, cur = w + 20, history[-1]
     _text(canvas, "INFERIA VISION RUNTIME", (x, 34), 0.75, INK, 2)
     _text(canvas, f"policy  {state['policy']}", (x, 60), 0.5, MUTED)
     _text(canvas, f"video   {state['video']}  frame {cur['frame']}", (x, 82), 0.5, MUTED)
     _text(canvas, "NOW RUNNING ON THE NPU", (x, 124), 0.5, MUTED)
-    color = MODEL_COLORS[cur["model"]]
-    _text(canvas, cur["model"].replace("yolo11", "YOLO11"), (x, 164), 1.15, color, 2)
-    _text(canvas, f"{cur['resolution']} px   {cur['board_precision']}", (x + 190, 164), 0.8, INK, 2)
+    cv2.rectangle(canvas, (x, 136), (x + PANEL_W - 40, 176), color, -1)
+    text_ink = (15, 23, 42) if sum(color) > 420 else INK
+    _text(canvas, cur["model"].replace("yolo11", "YOLO11"), (x + 10, 166), 0.95, text_ink, 2)
+    _text(canvas, f"{cur['resolution']} px  {cur['board_precision']}", (x + 185, 166), 0.8, text_ink, 2)
 
     y = 214
     _text(canvas, f"latency  {cur['latency_ms']:6.1f} ms", (x, y), 0.65, INK, 1)
@@ -117,8 +140,9 @@ def draw_frame(
     _text(canvas, "1-5 deadline  A auto  N next video", (x, h - 30), 0.48, MUTED)
     _text(canvas, "P pause  Q quit", (x, h - 10), 0.48, MUTED)
 
-    # timeline: per-frame latency (log scale, coloured by model) against the deadline
-    x0, x1, y0, y1 = 60, w + PANEL_W - 20, h + 20, h + STRIP_H - 20
+    # timeline: per-frame latency (log scale, coloured by configuration) against the deadline,
+    # with a marker on every switch
+    x0, x1, y0, y1 = 60, w + PANEL_W - 20, h + 34, h + STRIP_H - 14
     lo, hi = np.log(10.0), np.log(600.0)
 
     def ypix(ms):
@@ -130,17 +154,21 @@ def draw_frame(
     span = history[-(x1 - x0) // 2:]
     for i, r in enumerate(span):
         px = x0 + 2 * i
-        cv2.line(canvas, (px, y1), (px, ypix(r["latency_ms"])), MODEL_COLORS[r["model"]], 2)
+        cv2.line(canvas, (px, y1), (px, ypix(r["latency_ms"])), config_color(*config_key(r)), 2)
+        if i and config_key(r) != config_key(span[i - 1]):
+            cv2.drawMarker(canvas, (px, y0 - 5), INK, cv2.MARKER_TRIANGLE_DOWN, 8, 2)
         if r["deadline_ms"] is not None and i:
             prev = span[i - 1]["deadline_ms"]
             cv2.line(canvas, (px - 2, ypix(prev)), (px, ypix(r["deadline_ms"])), INK, 2)
-    lx = x1 - 330
-    for name, c in MODEL_COLORS.items():
-        cv2.rectangle(canvas, (lx, h + 8), (lx + 12, h + 18), c, -1)
-        _text(canvas, name.replace("yolo11", "YOLO11"), (lx + 16, h + 18), 0.42, INK)
-        lx += 100
+    # legend: every configuration visible in the timeline, fastest model first
+    seen = sorted({config_key(r) for r in span}, key=lambda k: (k[0][-1] != "n", k[0][-1] == "m", k[1], k[2]))
+    lx = x1 - 112 * len(seen)
+    for key in seen:
+        cv2.rectangle(canvas, (lx, h + 8), (lx + 14, h + 20), config_color(*key), -1)
+        _text(canvas, config_label(key), (lx + 18, h + 19), 0.42, INK)
+        lx += 112
     if deadline_levels:
-        _text(canvas, "white = deadline", (x0, h + 18), 0.42, INK)
+        _text(canvas, "white line = deadline, marks = switch", (x0, h + 19), 0.42, INK)
     return canvas
 
 
