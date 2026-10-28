@@ -30,7 +30,7 @@ def main():
     parser.add_argument("--training", default="configs/training/training_bdd.yaml")
     parser.add_argument("--hardware", default="configs/hardware.yaml", help="hardware profile yaml")
     parser.add_argument("--timesteps", type=int, default=None)
-    parser.add_argument("--algorithm", default=None, choices=["dqn", "ppo"])
+    parser.add_argument("--algorithm", default=None, choices=["dqn", "ppo", "maskable_ppo"])
     parser.add_argument(
         "--seed", type=int, default=None,
         help="override both the agent seed and the episode-sampling seed",

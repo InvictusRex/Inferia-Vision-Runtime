@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from model_management.runtime_config_space import RuntimeConfig
-from reinforcement_learning.vision_runtime_env import VisionRuntimeEnv
+from reinforcement_learning.vision_runtime_env import VisionRuntimeEnv, deadline_action_mask
 
 
 class Policy:
@@ -145,12 +145,18 @@ class DeadlineLookup(Policy):
 
 
 class SB3Policy(Policy):
-    def __init__(self, model, name: str = "ivr_rl"):
+    def __init__(self, model, name: str = "ivr_rl", action_latencies_ms: np.ndarray | None = None):
         self.model = model
         self.name = name
+        # set for MaskablePPO: the deadline mask it was trained with is applied at decision time
+        self.action_latencies_ms = action_latencies_ms
 
     def choose(self, obs: np.ndarray, info: dict) -> int:
-        action, _ = self.model.predict(obs, deterministic=True)
+        if self.action_latencies_ms is None:
+            action, _ = self.model.predict(obs, deterministic=True)
+        else:
+            mask = deadline_action_mask(self.action_latencies_ms, info["next_deadline_ms"])
+            action, _ = self.model.predict(obs, deterministic=True, action_masks=mask)
         return int(action)
 
 

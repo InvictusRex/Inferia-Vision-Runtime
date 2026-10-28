@@ -1,0 +1,16 @@
+algorithm: maskable_ppo  # sb3-contrib MaskablePPO; configs that cannot meet the deadline are masked
+timesteps: 300000
+policy: MlpPolicy
+learning_rate: 0.0003
+n_steps: 2048
+batch_size: 128
+n_epochs: 4
+gamma: 0.95  # the config choice mostly affects the current frame; a shorter horizon than 0.99 keeps the
+             # small accuracy gaps between configs visible, long enough to repay a 0.3 switch
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.05
+target_kl: 0.03
+save_dir: training
+tb_dir: runs/tensorboard
+log_name: ppo_masked_detrac_deadline

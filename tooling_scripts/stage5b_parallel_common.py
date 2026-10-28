@@ -51,12 +51,13 @@ def _build_policy(env, spec: tuple):
         return ContextualBandit(env.action_space.n)
     if kind == "deadline_lookup":
         return DeadlineLookup(env, accuracy=spec[1])
-    if kind in ("dqn", "ppo"):
-        from stable_baselines3 import DQN, PPO
+    if kind in ("dqn", "ppo", "maskable_ppo"):
+        from reinforcement_learning.train_runtime import ALGORITHMS
 
         _, checkpoint, name = spec
-        model = (DQN if kind == "dqn" else PPO).load(checkpoint, device="cpu")
-        return SB3Policy(model, name=name)
+        model = ALGORITHMS[kind]().load(checkpoint, device="cpu")
+        masked = kind == "maskable_ppo"
+        return SB3Policy(model, name=name, action_latencies_ms=env.action_latencies_ms if masked else None)
     raise ValueError(f"unknown policy spec: {spec}")
 
 
@@ -64,7 +65,7 @@ def _policy_name(spec: tuple) -> str:
     if spec[0] == "always":
         _, model, res, prec = spec
         return f"always_{model}_{res}_{prec}"
-    if spec[0] in ("dqn", "ppo"):
+    if spec[0] in ("dqn", "ppo", "maskable_ppo"):
         return spec[2]
     return spec[0]
 

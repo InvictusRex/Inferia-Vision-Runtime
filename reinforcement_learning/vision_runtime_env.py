@@ -18,6 +18,14 @@ from .observation_features import FeatureBuilder
 from .reward_calculator import RewardCalculator
 
 
+def deadline_action_mask(latencies_ms: np.ndarray, deadline_ms: float) -> np.ndarray:
+    """Actions whose nominal latency fits the deadline; the fastest one if none does."""
+    mask = latencies_ms <= deadline_ms
+    if not mask.any():
+        mask[int(np.argmin(latencies_ms))] = True
+    return mask
+
+
 class VisionRuntimeEnv(gym.Env):
     metadata = {"render_modes": []}
 
@@ -38,6 +46,7 @@ class VisionRuntimeEnv(gym.Env):
         deadline_levels_ms: Optional[list[float]] = None,
         deadline_hold_frames: tuple[int, int] = (50, 150),
         deadline_seed: int = 0,
+        deadline_curriculum: Optional[list[tuple[int, float]]] = None,
     ):
         super().__init__()
         self.frame_source = frame_source
@@ -59,8 +68,22 @@ class VisionRuntimeEnv(gym.Env):
         self._deadline_rng = np.random.default_rng(deadline_seed)
         self._deadline_ms: Optional[float] = None
         self._deadline_left = 0
+        # Optional training curriculum: (step, lowest level allowed from that step on), so
+        # tight deadlines join only after the agent has seen loose ones.
+        self.deadline_curriculum = sorted((int(s), float(d)) for s, d in deadline_curriculum or [])
+        self._total_steps = 0
 
         self.action_space = spaces.Discrete(self.config_space.n_actions)
+        self.action_latencies_ms = (
+            np.array(
+                [
+                    edge_profile.latency_ms(self.config_space.action_to_config(a))
+                    for a in range(self.config_space.n_actions)
+                ]
+            )
+            if edge_profile is not None
+            else None
+        )
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(self.features.dim,), dtype=np.float32
         )
@@ -75,7 +98,12 @@ class VisionRuntimeEnv(gym.Env):
         if not self.deadline_levels_ms:
             return
         if self._deadline_left <= 0:
-            self._deadline_ms = float(self._deadline_rng.choice(self.deadline_levels_ms))
+            lowest = 0.0
+            for step, level in self.deadline_curriculum:
+                if self._total_steps >= step:
+                    lowest = level
+            levels = [d for d in self.deadline_levels_ms if d >= lowest] or self.deadline_levels_ms
+            self._deadline_ms = float(self._deadline_rng.choice(levels))
             lo, hi = self.deadline_hold_frames
             self._deadline_left = int(self._deadline_rng.integers(lo, hi + 1))
         self._deadline_left -= 1
@@ -142,6 +170,7 @@ class VisionRuntimeEnv(gym.Env):
         scene = self.analyzer.analyze(frame, detections)
         self._scene = scene
         self._frame_idx += 1
+        self._total_steps += 1
 
         gt_boxes = ignored = None
         if hasattr(self.frame_source, "gt_for_current_frame"):
@@ -172,6 +201,12 @@ class VisionRuntimeEnv(gym.Env):
             deadline_ms is not None and self.telemetry.last_latency_ms() > deadline_ms
         )
         return obs, float(reward), False, False, info
+
+    def action_masks(self) -> np.ndarray:
+        """For MaskablePPO: only configurations that fit the deadline of the next frame."""
+        if self._deadline_ms is None or self.action_latencies_ms is None:
+            return np.ones(self.action_space.n, dtype=bool)
+        return deadline_action_mask(self.action_latencies_ms, self._deadline_ms)
 
     def _infer(self, frame: np.ndarray, action: int) -> Detections:
         config = self.config_space.action_to_config(action)

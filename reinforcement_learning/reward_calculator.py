@@ -30,6 +30,9 @@ class RewardConfig:
     constraint_cliff: float = 0.0
     map_iou_threshold: float = 0.5
     w_deadline: float = 2.0
+    # "flat": every late frame pays w_deadline; "proportional": w_deadline times the
+    # fraction by which the frame overshot its deadline, capped at w_deadline
+    deadline_penalty: str = "flat"
     # Official UA-DETRAC scoring: only these detector classes count (empty = all), and
     # predictions centred in a sequence's ignored regions are dropped before matching.
     vehicle_classes: tuple[int, ...] = ()
@@ -136,7 +139,10 @@ class ProxyReward(RewardCalculator):
         latency = telemetry.last_latency_ms()
         latency_term = -cfg.w_latency * min(1.0, latency / max(cfg.max_latency_ms, 1e-6))
         if deadline_ms is not None and latency > deadline_ms:
-            latency_term -= cfg.w_deadline
+            overshoot = 1.0
+            if cfg.deadline_penalty == "proportional":
+                overshoot = min(1.0, (latency - deadline_ms) / deadline_ms)
+            latency_term -= cfg.w_deadline * overshoot
 
         compute_term = 0.0
         if cfg.compute_cost and action < len(cfg.compute_cost):

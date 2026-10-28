@@ -161,4 +161,5 @@ def build_env_from_configs(
         # per-video schedule in evaluation, identical for every policy run on that video
         deadline_seed=int(env_cfg.get("seed", 0))
         + (zlib.crc32(Path(video_override).name.encode()) if video_override else 0),
+        deadline_curriculum=env_cfg.get("deadline_curriculum"),
     )

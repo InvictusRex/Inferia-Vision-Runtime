@@ -198,6 +198,16 @@ class EdgeProfile:
         self._temp = self.profile.simulated.ambient_temp_c
         self._last_config = None
 
+    def latency_ms(self, config: RuntimeConfig) -> float:
+        """Nominal per-frame latency: the measured value when present, else the estimate."""
+        measured = self.profile.measured.get(
+            f"{config.model}_{int(config.resolution)}_{config.precision}", {}
+        )
+        return measured.get(
+            "latency_ms",
+            self.latency.latency_ms(config.model, int(config.resolution), str(config.precision)),
+        )
+
     def snapshot(self, config: RuntimeConfig) -> EdgeSnapshot:
         phys = self.profile.physical
         sim = self.profile.simulated
@@ -210,7 +220,7 @@ class EdgeProfile:
         prec_bytes = float(PRECISION_BYTES.get(precision, 1.0))
         measured = self.profile.measured.get(f"{model}_{res}_{precision}", {})
 
-        latency_ms = measured.get("latency_ms", self.latency.latency_ms(model, res, precision))
+        latency_ms = self.latency_ms(config)
         if sim.thermal_throttle_enabled and self._temp > sim.thermal_throttle_temp_c:
             latency_ms *= sim.thermal_throttle_latency_factor
 

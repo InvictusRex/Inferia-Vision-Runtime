@@ -509,6 +509,44 @@ def check_deadline(variants_cfg, hardware_cfg) -> None:
     )
 
 
+def check_deadline_mask_and_curriculum(variants_cfg, hardware_cfg) -> None:
+    """The mask allows exactly the configs that fit the next deadline, the curriculum holds
+    back tight levels early in training, and the proportional penalty scales with overshoot."""
+    env_cfg = dict(
+        load_yaml("configs/env/env_detrac_deadline.yaml"),
+        deadline_curriculum=[[0, 100], [150, 20]],
+        deadline_hold_frames=[10, 10],  # many redraws, so both phases see several levels
+    )
+    reward_cfg = load_yaml("configs/reward/reward_detrac_deadline.yaml")
+    env = build_env_from_configs(env_cfg, variants_cfg, reward_cfg, hardware_cfg=hardware_cfg)
+    obs, info = env.reset()
+    ok_mask, early, late = True, set(), set()
+    for t in range(300):
+        shown = info["next_deadline_ms"]
+        mask = env.action_masks()
+        fits = env.action_latencies_ms <= shown
+        ok_mask &= bool((mask == fits).all()) if fits.any() else int(mask.sum()) == 1
+        (early if t < 150 else late).add(shown)
+        _, _, _, truncated, info = env.step(int(np.flatnonzero(mask)[0]))
+        if truncated:
+            obs, info = env.reset()
+    cfg = RewardConfig(w_latency=0.0, w_compute=0.0, w_switch=0.0, min_fps=0.0, w_deadline=2.0,
+                       deadline_penalty="proportional")
+    telemetry = Telemetry()
+    telemetry.record(25.0)
+    detections = Detections(np.zeros((0, 4)), np.zeros(0), np.zeros(0, dtype=int), [], 25.0)
+    met, missed = (
+        ProxyReward(cfg).compute(detections, SceneFeatures(), telemetry, None, 0, deadline_ms=d)
+        for d in (30.0, 20.0)
+    )
+    check(
+        "15. deadline mask, training curriculum and proportional deadline penalty",
+        ok_mask and min(early) >= 100 and min(late) < 100 and abs(met - missed - 0.5) < 1e-9,
+        f"mask_ok={ok_mask} early_levels={sorted(early)} later_levels={sorted(late)} "
+        f"penalty at 25% overshoot={met - missed:.3f} (expected 0.5)",
+    )
+
+
 def main() -> None:
     print("=== offline pipeline validation ===\n")
 
@@ -532,6 +570,7 @@ def main() -> None:
     check_profile_latency_reaches_reward(env_cfg, variants_cfg, reward_cfg, hw_cfg)
     check_official_scoring()
     check_deadline(variants_cfg, load_yaml("configs/hardware_measured.yaml"))
+    check_deadline_mask_and_curriculum(variants_cfg, load_yaml("configs/hardware_measured.yaml"))
 
     print()
     if FAILURES:

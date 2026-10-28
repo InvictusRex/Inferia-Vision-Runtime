@@ -11,6 +11,16 @@ from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from runtime.environment_factory import build_env_from_configs, load_yaml
 
 
+def _maskable_ppo():
+    # sb3-contrib is only needed for the masked variant
+    from sb3_contrib import MaskablePPO
+
+    return MaskablePPO
+
+
+ALGORITHMS = {"dqn": lambda: DQN, "ppo": lambda: PPO, "maskable_ppo": _maskable_ppo}
+
+
 class ProgressCallback(BaseCallback):
     """Prints a training-progress line every `log_every` steps (YOLO-style loop view)."""
 
@@ -136,7 +146,7 @@ def train(
         resume_path = Path(resume_from)
         if not resume_path.is_file():
             raise FileNotFoundError(f"resume checkpoint not found: {resume_path}")
-        model = (PPO if algorithm == "ppo" else DQN).load(
+        model = ALGORITHMS[algorithm]().load(
             str(resume_path),
             env=env,
             tensorboard_log=str(tb_dir),
@@ -146,8 +156,8 @@ def train(
             f"resumed {algorithm} from {resume_path} "
             f"(already {model.num_timesteps:,} steps, target {timesteps:,})"
         )
-    elif algorithm == "ppo":
-        model = PPO(
+    elif algorithm in ("ppo", "maskable_ppo"):
+        model = ALGORITHMS[algorithm]()(
             **common,
             learning_rate=float(training_cfg.get("learning_rate", 3e-4)),
             n_steps=int(training_cfg.get("n_steps", 2048)),
@@ -219,7 +229,7 @@ if __name__ == "__main__":
     parser.add_argument("--training", default="configs/training/training_bdd.yaml")
     parser.add_argument("--hardware", default="configs/hardware.yaml", help="hardware profile yaml")
     parser.add_argument("--timesteps", type=int, default=None)
-    parser.add_argument("--algorithm", default=None, choices=["dqn", "ppo"])
+    parser.add_argument("--algorithm", default=None, choices=sorted(ALGORITHMS))
     parser.add_argument("--log-every", type=int, default=2000)
     parser.add_argument("--verbose-episodes", action="store_true")
     parser.add_argument(

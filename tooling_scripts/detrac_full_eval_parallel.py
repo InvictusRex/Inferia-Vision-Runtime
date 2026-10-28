@@ -93,7 +93,8 @@ def main() -> None:
         specs += [("deadline_lookup", None), ("deadline_lookup", load_yaml(args.deadline_lookup))]
     for item in args.model:
         name, path = item.split("=", 1)
-        kind = "ppo" if "ppo" in Path(path).stem.lower() else "dqn"
+        stem = Path(path).stem.lower()
+        kind = "maskable_ppo" if "masked" in stem else "ppo" if "ppo" in stem else "dqn"
         specs.append((kind, path, name))
     if not specs:
         raise SystemExit("nothing to evaluate: pass --fixed, --baselines and/or --model")
