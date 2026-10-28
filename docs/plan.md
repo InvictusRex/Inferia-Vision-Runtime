@@ -425,7 +425,11 @@ CLI entrypoints: `python -m evaluation.benchmark_runner` (baselines comparison,
       deadline lookup table (333.9). PPO converges onto n480 int8 (315.9), and again with lr 1e-4, n_steps 4096,
       batch 256 and 300k steps (315.8). Deadline-masked PPO (sb3-contrib MaskablePPO) and a
       curriculum with a proportional penalty each give one adaptive seed (330.0 and 325.8, 0% late)
-      out of three; the others stay on n480 or ignore the deadline. DQN adapts in 3/3 seeds. On the board the
+      out of three; the others stay on n480 or ignore the deadline. DQN adapts in 3/3 seeds.
+      Root cause: at gamma 0.95 the per-frame F1 noise of ~20 later frames swamps the ~0.05 gain.
+      PPO with gamma 0.5 (`training_ppo_deadline_short_horizon.yaml`): plain 329.8 / 330.4 / 317.4
+      (2/3 clearly adaptive), masked 324.9 / 331.1 / 331.1 (3/3, best learned result, p = 0.05
+      vs the lookup table). On the board the
       DQN policy met 97% of deadlines end to end at 33 FPS
 - [ ] Constraint solver: min FPS / max latency / max power / max memory / thermal
 

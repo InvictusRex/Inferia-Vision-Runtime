@@ -82,6 +82,8 @@ def chart_final(eval_csvs: list[Path], out: Path, title: str) -> None:
     seeds: dict[str, list[float]] = defaultdict(list)
     bars = []
     for name, values in per_policy.items():
+        if "masked" in name:  # deadline-masked PPO gets the latency profile; reported in tables only
+            continue
         if name.startswith("ivr_"):
             algo = name.split("_")[1].upper()
             seeds[algo].append(st.mean(values))
@@ -315,7 +317,7 @@ def chart_deadline(eval_csvs: list[Path], out: Path) -> None:
             ax.scatter(miss, f1, s=110, marker="D", color=CONTEXT_STRONG, edgecolor=SURFACE,
                        linewidth=1.5, zorder=3)
     for algo, color in (("dqn", BLUE), ("ppo", ORANGE)):
-        seeds = [p for n, p in points.items() if n.startswith(f"ivr_{algo}")]
+        seeds = [p for n, p in points.items() if n.startswith(f"ivr_{algo}") and "masked" not in n]
         if seeds:
             ax.scatter(*zip(*seeds), s=120, color=color, edgecolor=SURFACE, linewidth=1.5,
                        zorder=4, label=f"IVR-{algo.upper()} ({len(seeds)} seeds)")
@@ -371,7 +373,7 @@ def main() -> None:
             out / "test_detrac_deadline_fixed_eval.csv",
             out / "test_detrac_deadline_lookup_eval.csv",
             out / "test_detrac_deadline_dqn_eval.csv",
-            out / "test_detrac_deadline_ppo_eval.csv",
+            out / "test_detrac_deadline_ppo_short_eval.csv",  # PPO at gamma 0.5
         )
         if p.exists()
     ]

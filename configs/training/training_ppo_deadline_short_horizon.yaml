@@ -1,0 +1,17 @@
+algorithm: ppo
+timesteps: 300000
+policy: MlpPolicy
+learning_rate: 0.0003
+n_steps: 2048
+batch_size: 128
+n_epochs: 4
+gamma: 0.5  # one config choice affects mainly its own frame (plus the next frame's switch cost); a
+            # short horizon keeps the advantage from being swamped by the per-frame F1 noise of
+            # later frames, which drowned the small accuracy gaps at gamma 0.95
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.05
+target_kl: 0.03
+save_dir: training
+tb_dir: runs/tensorboard
+log_name: ppo_detrac_deadline_short_horizon
