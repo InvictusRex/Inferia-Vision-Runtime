@@ -429,8 +429,9 @@ CLI entrypoints: `python -m evaluation.benchmark_runner` (baselines comparison,
       Root cause: at gamma 0.95 the per-frame F1 noise of ~20 later frames swamps the ~0.05 gain.
       PPO with gamma 0.5 (`training_ppo_deadline_short_horizon.yaml`): plain 329.8 / 330.4 / 317.4
       (2/3 clearly adaptive), masked 324.9 / 331.1 / 331.1 (3/3, best learned result, p = 0.05
-      vs the lookup table). On the board the
-      DQN policy met 97% of deadlines end to end at 33 FPS
+      vs the lookup table).
+      On the board, over four full held-out videos: DQN met 97.0-99.9% of deadlines (median loop
+      21-23 FPS), PPO gamma 0.5 97.3-99.9% (34-36 FPS); late frames are almost all at 20 ms
 - [ ] Constraint solver: min FPS / max latency / max power / max memory / thermal
 
 ### Phase 4 — Research
