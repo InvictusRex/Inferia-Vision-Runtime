@@ -184,6 +184,8 @@ def main() -> None:
                         help="deadline levels and hold for a deadline-aware policy")
     parser.add_argument("--deadline-ms", type=float, default=None,
                         help="starting deadline; default is the auto schedule")
+    parser.add_argument("--hold-frames", type=int, nargs=2, default=None, metavar=("MIN", "MAX"),
+                        help="frames each auto-schedule deadline is held (default: the env config's training hold)")
     parser.add_argument("--cores", type=int, default=3)
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--show", action="store_true", help="open a live window")
@@ -228,7 +230,7 @@ def main() -> None:
     if policy.observation_space.shape[0] == FeatureBuilder.DIM:
         levels = []  # a policy trained without a deadline
     deadline_aware = bool(levels)
-    hold_lo, hold_hi = env_cfg.get("deadline_hold_frames", (50, 150))
+    hold_lo, hold_hi = args.hold_frames or env_cfg.get("deadline_hold_frames", (50, 150))
     sim = edge.profile.simulated
     features = FeatureBuilder(
         n_actions=space.n_actions,
@@ -306,7 +308,8 @@ def main() -> None:
             if state["auto"]:
                 hold -= 1
                 if hold <= 0:
-                    deadline = float(rng.choice(levels))
+                    # never redraw the current level, so every change of schedule is visible
+                    deadline = float(rng.choice([lv for lv in levels if lv != deadline] or levels))
                     hold = int(rng.integers(hold_lo, hold_hi + 1))
             scene = analyzer.analyze(frame, detections)
             obs = features.build(scene, telemetry, action, deadline)
