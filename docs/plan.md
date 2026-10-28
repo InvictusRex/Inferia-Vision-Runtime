@@ -423,7 +423,9 @@ CLI entrypoints: `python -m evaluation.benchmark_runner` (baselines comparison,
       measured board latency, DQN (3 seeds, 325.0 / 325.0 / 330.5) beats all 18 fixed configs
       (best: n480 int8, 315.8, p <= 8e-5) with 0% late frames and is 1-3% below a hand-built
       deadline lookup table (333.9). PPO converges onto n480 int8 (315.9), and again with lr 1e-4, n_steps 4096,
-      batch 256 and 300k steps (315.8). On the board the
+      batch 256 and 300k steps (315.8). Deadline-masked PPO (sb3-contrib MaskablePPO) and a
+      curriculum with a proportional penalty each give one adaptive seed (330.0 and 325.8, 0% late)
+      out of three; the others stay on n480 or ignore the deadline. DQN adapts in 3/3 seeds. On the board the
       DQN policy met 97% of deadlines end to end at 33 FPS
 - [ ] Constraint solver: min FPS / max latency / max power / max memory / thermal
 
