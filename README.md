@@ -209,5 +209,6 @@ train.py, eval.py, sweep.py   command line entrypoints
 ## Further reading
 
 - [docs/experiments.md](docs/experiments.md): full experiment record, from the first proxy reward to the deadline experiment and on device runs
-- [docs/plan.md](docs/plan.md): design decisions and architecture notes
+- [docs/architecture.md](docs/architecture.md): architecture, components and design decisions
+- [docs/proof_of_concept.md](docs/proof_of_concept.md): the first single-video model switching result
 - [docs/RUN_BDD.md](docs/RUN_BDD.md): training and evaluating on BDD-A dashcam footage

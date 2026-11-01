@@ -1,4 +1,4 @@
-# RUN_BDD.md — Offline BDD-A training & evaluation
+# Training and evaluating on BDD-A
 
 Everything below runs **offline** (no internet): YOLO weights are already in
 `weights/`, BDD-A videos are local, and all Python deps are in `.venv`.
@@ -33,11 +33,11 @@ python train.py --dataset-dir "..\BDDA\BDDA"
 Or the module form from the project root:
 
 ```powershell
-& .\.venv\Scripts\python.exe -m implementation.reinforcement_learning.train_runtime `
-  --env configs\env_bdd.yaml `
+& .\.venv\Scripts\python.exe -m reinforcement_learning.train_runtime `
+  --env configs\env\env_bdd.yaml `
   --variants configs\variants.yaml `
-  --reward configs\reward_bdd.yaml `
-  --training configs\training_bdd.yaml
+  --reward configs\reward\reward_bdd.yaml `
+  --training configs\training\training_bdd.yaml
 ```
 
 - Defaults: **DQN, 120,000 timesteps**, 18-action space
@@ -89,10 +89,10 @@ python eval.py --model training\dqn_bdd_final.zip
 Or the module form from the project root:
 
 ```powershell
-& .\.venv\Scripts\python.exe -m implementation.evaluation.benchmark_runner `
-  --env configs\env_bdd.yaml `
+& .\.venv\Scripts\python.exe -m evaluation.benchmark_runner `
+  --env configs\env\env_bdd.yaml `
   --variants configs\variants.yaml `
-  --reward configs\reward_bdd.yaml `
+  --reward configs\reward\reward_bdd.yaml `
   --dataset test `
   --model training\dqn_bdd_final.zip
 ```
@@ -105,7 +105,8 @@ Or the module form from the project root:
   rewards.
 - Writes per-video rows to `output\test_dqn_bdd_final_eval_output.csv`.
 - Prints a final **claim check** line: `ivr_dqn` mean reward vs
-  `always_yolo11s_640_fp32` (the Phase 1 asterisk we're fixing).
+  `always_yolo11s_640_fp32` the strongest fixed configuration in the
+  [proof of concept](proof_of_concept.md).
 - **Output naming scheme** (so future runs never clobber each other):
   `output/{dataset}_{model_stem}_eval_output.csv`, e.g. `test_dqn_bdd_final_eval_output.csv`,
   `validation_ppo_bdd_eval_output.csv`. Override with `--output <name>`.
@@ -132,13 +133,13 @@ python eval.py --output <name>             # override the CSV filename
 ... --dataset test --n-videos 50
 ```
 
-## 5. Train PPO too (Phase 2b, optional)
+## 5. Train PPO (optional)
 
 ```powershell
 python train.py --algorithm ppo --timesteps 120000
 ```
 
-## 6. Phase 2b: PPO 300k + switch-penalty sweep (root launcher)
+## 6. PPO 300k + switch-penalty sweep (root launcher)
 
 ```powershell
 python sweep.py                              # PPO 300k, then w_switch 0.1/0.5 @ 60k
@@ -152,7 +153,7 @@ python sweep.py --sweep-values 0.1,0.3,0.5 --sweep-timesteps 60000
 - Step 2 retrains `{log_root}_ws{w}_final.zip` for each `--sweep-values` entry (default 0.1 and 0.5).
 - Each job prints the same live progress bar as `train.py`.
 
-## 7. Phase 2b: edge-emulated hardware constraints
+## 7. Edge-emulated hardware constraints
 
 The reward and observation read **nominal Rock 5C values** (never the 4060's
 live numbers — that would break VRAM/power feasibility and reintroduce thermal
@@ -161,7 +162,7 @@ noise). `configs/hardware.yaml` defines the edge profile (6 TOPS, 2048 MB VRAM,
 VRAM/util/power/temp/latency per config.
 
 - Observation is now **14-dim** (dims 10–13 = emulated util/vram/temp/power).
-  The old 10-dim Phase 2a checkpoints are **incompatible** — retrain DQN + PPO.
+  Checkpoints trained on the earlier 10-dim observation are **incompatible**.
 - Constraints + weights live in `configs/reward/reward_constrained_bdd.yaml`
   (`max_vram_mb 2048`, `max_power_w 5`, `max_gpu_temp_c 80`, `max_gpu_util 90`,
   `max_latency_ms 100`). Violations add a heavy `w*(1+fraction)` penalty.
@@ -174,24 +175,23 @@ python eval.py --constraints on                     # eval under the same constr
 python eval.py --reward configs/reward/reward_constrained_bdd.yaml
 ```
 
-> **Note:** all EdgeProfile numbers are placeholders pending Phase 3 real
-> benchmark measurements on the Radxa Rock 5C.
+> **Note:** these EdgeProfile numbers are simulated estimates. Train with
+> `--hardware configs/hardware_measured.yaml` to use the values measured on the
+> Radxa ROCK 5C instead.
 
 ## 8. Density survey (already done; rerun anytime)
 
 ```powershell
-& .\.venv\Scripts\python.exe -m tools.survey_density --n-videos 40
+& .\.venv\Scripts\python.exe -m tooling_scripts.survey_density --n-videos 40
 ```
 
 ---
 
 ## Notes
 
-- **No internet needed.** If a `ModuleNotFoundError` appears it's a local dep
-  issue (tell me, don't reinstall anything without checking).
+- **No internet needed.** A `ModuleNotFoundError` means a dependency is missing
+  from the local environment; install the project with `pip install -e .`.
 - `--training` points at the config file that sets hyperparameters and
   `log_name`. The saved file is `training\{log_name}_final.zip`.
-- The old Phase 1 checkpoint `training\dqn_final.zip` was trained on the old
+- The proof-of-concept checkpoint `training\dqn_final.zip` was trained on the
   3-action space and is **not** compatible with the 18-action env.
-- Nothing here commits anything to git; when you're happy with results, ask me
-  to record them in `docs/knowledge_graph.json`.

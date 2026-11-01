@@ -20,9 +20,6 @@ weights/*.pt
 /training/
 *.log
 
-# Local project context (regenerated at milestones)
-docs/knowledge_graph.json
-
 # IDE / OS
 .idea/
 .vscode/
