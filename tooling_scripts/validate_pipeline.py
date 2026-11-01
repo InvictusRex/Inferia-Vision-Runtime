@@ -1,4 +1,4 @@
-"""Offline pipeline validation gate.
+"""Offline pipeline validation suite.
 
 Exercises the full chain
 
@@ -10,7 +10,7 @@ merely that values are non-zero.
 
 Run from the project root:
 
-    python tools/validate_pipeline.py
+    python tooling_scripts/validate_pipeline.py
 
 Exits non-zero if any check fails.
 """
@@ -515,7 +515,7 @@ def check_deadline_mask_and_curriculum(variants_cfg, hardware_cfg) -> None:
     env_cfg = dict(
         load_yaml("configs/env/env_detrac_deadline.yaml"),
         deadline_curriculum=[[0, 100], [150, 20]],
-        deadline_hold_frames=[10, 10],  # many redraws, so both phases see several levels
+        deadline_hold_frames=[10, 10],  # many redraws, so all of training sees several levels
     )
     reward_cfg = load_yaml("configs/reward/reward_detrac_deadline.yaml")
     env = build_env_from_configs(env_cfg, variants_cfg, reward_cfg, hardware_cfg=hardware_cfg)

@@ -4,7 +4,7 @@
 # non-degenerate. They are NOT physical limits of the ROCK 5C.
 #
 # Verified against implementation/runtime/edge_profile.py (see
-# tools/validate_pipeline.py check 7): with these thresholds, exactly 4/18 actions
+# tooling_scripts/validate_pipeline.py check 7): with these thresholds, exactly 4/18 actions
 # violate at least one constraint -- yolo11m/640/fp32, yolo11m/960/fp16,
 # yolo11m/960/fp32, yolo11s/960/fp32.
 quality_backend: proxy

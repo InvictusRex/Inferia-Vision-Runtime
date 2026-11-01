@@ -2,7 +2,7 @@
 # Sections are deliberately separated: `physical` is vendor specification,
 # `simulated` is synthetic IVR parameters (NOT measurements, NOT board specs),
 # `policy` is IVR runtime budgets (NOT physical limits),
-# `measured` stays empty until Phase 3 benchmarking on real hardware.
+# `measured` stays empty until the target device is benchmarked (see hardware_measured.yaml).
 name: rock_5c_rk3588s2
 
 physical:            # vendor-published specification of the real 8 GB ROCK 5C
@@ -30,4 +30,4 @@ policy:              # IVR RUNTIME BUDGETS -- project choices, not hardware limi
   inference_memory_budget_mb: 512      # IVR inference allocation, NOT the 8 GB system memory
   target_fps: 30.0
 
-measured: {}         # Phase 3 fills this from real ROCK 5C benchmarks
+measured: {}         # filled by tooling_scripts/rknn_measured_profile.py from real ROCK 5C benchmarks

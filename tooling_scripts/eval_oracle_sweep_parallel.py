@@ -1,8 +1,8 @@
 """18-action fixed-policy landscape on a 100-video subsample of the
 306-video test split, parallelized across the 18 actions.
 
-Same seeded (seed=42) subsample-selection logic as the sequential
-tools/stage5b_oracle_100v.py, same output filename -- just distributed across
+Same seeded (seed=42) subsample selection as
+tooling_scripts/eval_oracle_sweep.py, same output filename -- just distributed across
 a multiprocessing.Pool of worker processes instead of one process working
 through all 18 actions serially.
 """
@@ -19,11 +19,11 @@ sys.path.insert(0, str(ROOT))
 
 from evaluation.benchmark_runner import _split_videos  # noqa: E402
 from runtime.environment_factory import load_yaml  # noqa: E402
-from tooling_scripts.stage5b_parallel_common import run_parallel  # noqa: E402
+from tooling_scripts.parallel_eval_common import run_parallel  # noqa: E402
 
 SUBSAMPLE_SEED = 42
 SUBSAMPLE_SIZE = 100
-OUTPUT_NAME = "stage5_oracle_18action_100v.csv"
+OUTPUT_NAME = "bdd_oracle_18action_100v.csv"
 
 
 def main() -> None:
@@ -45,7 +45,7 @@ def main() -> None:
     print(f"policies ({len(specs)}): {specs}", flush=True)
 
     run_parallel(specs, subsample, output_dir="output", output_filename=OUTPUT_NAME)
-    print("=== stage5b 100-video oracle sweep (parallel) complete ===", flush=True)
+    print("=== 100-video oracle sweep (parallel) complete ===", flush=True)
 
 
 if __name__ == "__main__":

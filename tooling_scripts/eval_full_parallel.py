@@ -1,10 +1,10 @@
 """Full 306-video evaluation, parallelized across policies.
 
-Replaces the sequential tools/stage5b_full_eval.py: same 10 required policies,
+Parallel version of tooling_scripts/eval_full.py: same 10 policies,
 same full 306-video test split, same output filename -- just run with a
 multiprocessing.Pool of worker processes (one policy per worker at a time)
 instead of one process working through all 10 policies serially. See
-tools/stage5b_parallel_common.py for why this is safe to parallelize.
+tooling_scripts/parallel_eval_common.py for why this is safe to parallelize.
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ sys.path.insert(0, str(ROOT))
 
 from evaluation.benchmark_runner import _split_videos  # noqa: E402
 from runtime.environment_factory import load_yaml  # noqa: E402
-from tooling_scripts.stage5b_parallel_common import run_parallel  # noqa: E402
+from tooling_scripts.parallel_eval_common import run_parallel  # noqa: E402
 
 DQN_CHECKPOINT = "training/dqn_bdd_s5_120k_final.zip"
 PPO_CHECKPOINT = "training/ppo_bdd_s5_300k_final.zip"
-OUTPUT_NAME = "stage5_306v_full_eval_output.csv"
+OUTPUT_NAME = "bdd_full_eval_output.csv"
 
 SPECS = [
     ("always", "yolo11n", 640, "fp32"),
@@ -50,7 +50,7 @@ def main() -> None:
         output_filename=OUTPUT_NAME,
         stats_reference="ivr_dqn_s5_120k",
     )
-    print("=== stage5b full-306 eval (parallel) complete ===", flush=True)
+    print("=== full 306-video eval (parallel) complete ===", flush=True)
 
 
 if __name__ == "__main__":

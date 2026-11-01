@@ -1,21 +1,20 @@
-"""Full 306-video evaluation of the new DQN/PPO checkpoints plus the required
+"""Full 306-video evaluation of the new DQN/PPO checkpoints plus the
 reference baselines.
 
-This does not use eval.py's CLI because the required baseline set includes two
+This does not use eval.py's CLI because the baseline set includes two
 specific fixed configs (action 5 and action 3) that eval.py's default_baselines()
 does not construct. It reuses the same underlying evaluation infrastructure
 (compare_policies_dataset) with an explicitly assembled policy list instead.
 
-Required baselines:
+Baselines:
   - Always-yolo11n, Always-yolo11s, Always-yolo11m (canonical 640/fp32 configs)
-  - Always-yolo11n/960/fp16 (action 5 -- the exact config PPO previously selected)
+  - Always-yolo11n/960/fp16 (action 5 -- the config PPO selected on BDD-A)
   - Always-yolo11n/640/fp16 (action 3 -- the best fixed configuration among all 18
-    actions, per the prior 40-video forensic landscape survey)
+    actions, per the 40-video landscape survey)
   - Rule-Based, Random, Contextual Bandit
 plus the new DQN and PPO checkpoints.
 
-Output: output/stage5_306v_full_eval_output.csv (+ _stats.csv), never overwrites
-any historical output.
+Output: output/bdd_full_eval_output.csv (+ _stats.csv)
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ from runtime.environment_factory import build_env_from_configs, load_yaml  # noq
 
 DQN_CHECKPOINT = "training/dqn_bdd_s5_120k_final.zip"
 PPO_CHECKPOINT = "training/ppo_bdd_s5_300k_final.zip"
-OUTPUT_NAME = "stage5_306v_full_eval_output.csv"
+OUTPUT_NAME = "bdd_full_eval_output.csv"
 
 
 def main() -> None:
@@ -73,7 +72,7 @@ def main() -> None:
         progress_every=20,
         stats_reference="ivr_dqn_s5_120k",
     )
-    print("=== stage5b full-306 eval complete ===", flush=True)
+    print("=== full 306-video eval complete ===", flush=True)
 
 
 if __name__ == "__main__":

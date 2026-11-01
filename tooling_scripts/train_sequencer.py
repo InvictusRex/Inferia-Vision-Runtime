@@ -1,16 +1,16 @@
 """Training sequencer: runs DQN 120k then PPO 300k, back-to-back, unattended.
 
-Both jobs go through tools/run_detached.py exactly as any other detached
+Both jobs go through tooling_scripts/run_detached.py exactly as any other detached
 experiment would (each gets its own experiment directory with its own
 command/config-snapshot/PID/status/log/checkpoint path) -- this script only
 adds the "wait for DQN to finish, then launch PPO" sequencing, so the two
 training jobs never contend for the GPU concurrently. This script is itself
-meant to be launched detached (see tools/run_detached.py), so the sequencing
+meant to be launched detached (see tooling_scripts/run_detached.py), so the sequencing
 survives the launching session ending, same as the jobs it sequences.
 
 Usage:
-    python tools/run_detached.py --name stage5_sequencer -- \
-        <python> tools/stage5_sequencer.py
+    python tooling_scripts/run_detached.py --name train_sequencer -- \
+        <python> tooling_scripts/train_sequencer.py
 """
 
 from __future__ import annotations

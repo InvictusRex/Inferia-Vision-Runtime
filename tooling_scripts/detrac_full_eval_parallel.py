@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from runtime.environment_factory import detrac_sequence_dirs, load_yaml  # noqa: E402
-from tooling_scripts.stage5b_parallel_common import run_parallel  # noqa: E402
+from tooling_scripts.parallel_eval_common import run_parallel  # noqa: E402
 
 
 def main() -> None:

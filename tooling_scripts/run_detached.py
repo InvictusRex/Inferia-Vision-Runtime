@@ -14,10 +14,10 @@ everything needed to review or resume the run later:
 - the final exit code
 
 Usage:
-    python tools/run_detached.py --name dqn_p2b_val -- ^
+    python tooling_scripts/run_detached.py --name dqn_bdd_val -- ^
         python train.py --algorithm dqn --timesteps 20000 --hardware configs/hardware.yaml
 
-    python tools/run_detached.py --status runs/experiments/<run_dir>
+    python tooling_scripts/run_detached.py --status runs/experiments/<run_dir>
 
 Each run gets its own directory under runs/experiments/<timestamp>_<name>/:
     meta.json          -- status, PID, timestamps, command, exit code
@@ -179,7 +179,7 @@ def main() -> None:
     run_dir = launch(args.name, command, args.checkpoint_path)
     print(f"launched: {run_dir}")
     print(f"log:      {run_dir / 'log.txt'}")
-    print(f"status:   python tools/run_detached.py --status {run_dir}")
+    print(f"status:   python tooling_scripts/run_detached.py --status {run_dir}")
 
 
 if __name__ == "__main__":

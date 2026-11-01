@@ -1,11 +1,11 @@
 """Evaluation sequencer: waits for the training sequencer to finish
 successfully, then runs the full-306 evaluation, then the 100-video oracle
-sweep, back to back. Meant to be launched detached (see tools/run_detached.py)
+sweep, back to back. Meant to be launched detached (see tooling_scripts/run_detached.py)
 so it survives the launching session ending, same as the jobs it sequences.
 
 Usage:
-    python tools/run_detached.py --name eval_sequencer -- \
-        <python> tools/stage5b_sequencer.py <path to training sequencer run dir>
+    python tooling_scripts/run_detached.py --name eval_sequencer -- \
+        <python> tooling_scripts/eval_sequencer.py <path to training sequencer run dir>
 """
 
 from __future__ import annotations
@@ -25,12 +25,12 @@ JOBS = [
     {
         "name": "full_306_eval",
         "checkpoint_path": None,
-        "command": [PY, "tools/stage5b_full_eval_parallel.py"],
+        "command": [PY, "tooling_scripts/eval_full_parallel.py"],
     },
     {
         "name": "oracle_100v_sweep",
         "checkpoint_path": None,
-        "command": [PY, "tools/stage5b_oracle_100v_parallel.py"],
+        "command": [PY, "tooling_scripts/eval_oracle_sweep_parallel.py"],
     },
 ]
 
@@ -45,7 +45,7 @@ def wait_for(run_dir: Path, poll_seconds: int = 30) -> dict:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("usage: stage5b_sequencer.py <training sequencer run dir>")
+        raise SystemExit("usage: eval_sequencer.py <training sequencer run dir>")
     training_dir = Path(sys.argv[1])
 
     print(f"=== evaluation sequencer start {_now()} ===", flush=True)

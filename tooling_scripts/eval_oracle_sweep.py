@@ -1,18 +1,15 @@
 """18-action fixed-policy landscape on a 100-video subsample of the
 306-video test split, for the per-video adaptive-headroom oracle.
 
-The full 18x306 sweep (5508 episodes, ~19h at the observed per-episode rate) was
-judged disproportionate; this runs the full 18-action sweep on a smaller, fixed,
-pre-registered subsample instead. The subsample is chosen by a seeded random
+The full 18x306 sweep (5508 episodes, ~19h) is impractical, so this runs the
+18-action sweep on a smaller, fixed subsample. The subsample is chosen by a seeded random
 draw (seed=42) BEFORE any of this data exists, so it cannot be cherry-picked
-after the fact. DQN, PPO and the other required baselines are evaluated
-separately on the COMPLETE 306-video set (see stage5b_full_eval.py) -- headroom
+after the fact. DQN, PPO and the other baselines are evaluated
+separately on the COMPLETE 306-video set (see eval_full.py) -- headroom
 figures computed from this file are explicitly a 100-video-subsample estimate,
 never conflated with the full-306 metrics.
 
-Output: output/stage5_oracle_18action_100v.csv, a new artifact name that does
-not overwrite anything (including the unrelated 10- and 40-video forensic
-landscape CSVs from the earlier investigation).
+Output: output/bdd_oracle_18action_100v.csv
 """
 
 from __future__ import annotations
@@ -31,7 +28,7 @@ from runtime.environment_factory import build_env_from_configs, load_yaml  # noq
 
 SUBSAMPLE_SEED = 42
 SUBSAMPLE_SIZE = 100
-OUTPUT_NAME = "stage5_oracle_18action_100v.csv"
+OUTPUT_NAME = "bdd_oracle_18action_100v.csv"
 
 
 def main() -> None:
@@ -71,7 +68,7 @@ def main() -> None:
         output_filename=OUTPUT_NAME,
         progress_every=20,
     )
-    print("=== stage5b 100-video oracle sweep complete ===", flush=True)
+    print("=== 100-video oracle sweep complete ===", flush=True)
 
 
 if __name__ == "__main__":

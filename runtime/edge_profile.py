@@ -118,8 +118,8 @@ class EdgeProfile:
     Models the ROCK 5C (RK3588S2, 6 TOPS INT8 NPU, shared LPDDR4X memory) as a
     synthetic simulator so the RL agent trains against a consistent, device-agnostic
     cost model instead of the noisy live behavior of the dev GPU. `simulated` values
-    are temporary IVR parameters, not measurements; they are to be calibrated with
-    real ROCK 5C benchmarks in Phase 3 (see `measured:` in configs/hardware.yaml).
+    are IVR parameters, not measurements; any value present in `measured:` (filled
+    from real ROCK 5C benchmarks, see configs/hardware_measured.yaml) replaces them.
     """
 
     def __init__(
